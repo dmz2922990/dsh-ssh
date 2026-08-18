@@ -14,26 +14,26 @@ window.__ModuleLoader__.load({
 		var exports = module.exports;
 		Object.defineProperty(exports, Symbol.toStringTag, { value: "Module" });
 		let react = require("react");
+		let ui = require("@deepseek-ai/dsh-client-ui-primitives");
 		const React = react.default ?? react;
+		const Button = (ui.default ?? ui).Button || ui.Button;
+		const Input = (ui.default ?? ui).Input || ui.Input;
 		const e = React.createElement;
 
 		const CSS = `
-.sshm-section { display: flex; flex-direction: column; gap: 16px; font-size: 13px; }
-.sshm-row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
-.sshm-card { border: 1px solid rgba(128,128,128,.4); border-radius: 8px; padding: 10px 12px; display: flex; flex-direction: column; gap: 6px; }
-.sshm-card-head { display: flex; align-items: center; gap: 8px; justify-content: space-between; }
-.sshm-title { font-weight: 600; }
-.sshm-muted { opacity: 0.65; }
-.sshm-form { display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 8px; border: 1px dashed rgba(128,128,128,.5); border-radius: 8px; padding: 12px; }
-.sshm-field { display: flex; flex-direction: column; gap: 3px; }
-.sshm-field label { font-size: 11px; opacity: 0.75; }
-.sshm-field input, .sshm-field select, .sshm-row input, .sshm-row select { padding: 4px 6px; border: 1px solid rgba(128,128,128,.5); border-radius: 4px; background: transparent; color: inherit; font-size: 12px; }
-.sshm-btn { padding: 4px 10px; border-radius: 5px; border: 1px solid rgba(128,128,128,.6); background: transparent; color: inherit; cursor: pointer; font-size: 12px; }
-.sshm-btn:hover { opacity: 0.85; }
-.sshm-btn-primary { border-color: transparent; background: #3a9; color: #fff; }
-.sshm-btn-danger { border-color: #c55; color: #e77; }
-.sshm-out { background: rgba(128,128,128,.12); border-radius: 6px; padding: 8px; white-space: pre-wrap; font-family: monospace; font-size: 11px; max-height: 220px; overflow: auto; }
-.sshm-error { color: #e77; }
+.ssh-section { display: flex; flex-direction: column; gap: 14px; }
+.ssh-row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; color: var(--dsw-alias-label-secondary); font-size: 13px; }
+.ssh-card { border: 1px solid var(--dsw-alias-border-l1); border-radius: 10px; padding: 12px 14px; display: flex; flex-direction: column; gap: 8px; background: var(--dsw-alias-bg-layer-1); }
+.ssh-card-head { display: flex; align-items: baseline; gap: 8px; justify-content: space-between; }
+.ssh-title { font-weight: 600; color: var(--dsw-alias-label-primary); }
+.ssh-muted { color: var(--dsw-alias-label-secondary); font-size: 12px; }
+.ssh-error { color: var(--dsw-alias-state-error-primary); font-size: 13px; }
+.ssh-form { display: grid; grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); gap: 10px; border: 1px solid var(--dsw-alias-border-l1); border-radius: 10px; padding: 12px; background: var(--dsw-alias-bg-layer-2); }
+.ssh-field { display: flex; flex-direction: column; gap: 4px; }
+.ssh-field > label { font-size: 11px; color: var(--dsw-alias-label-secondary); }
+.ssh-select { padding: 5px 8px; border: 1px solid var(--dsw-alias-border-l2); border-radius: 6px; background: var(--dsw-alias-bg-layer-1); color: var(--dsw-alias-label-primary); font-size: 12px; }
+.ssh-out { background: var(--dsw-alias-bg-layer-2); border: 1px solid var(--dsw-alias-border-l1); border-radius: 8px; padding: 10px; white-space: pre-wrap; font-family: ui-monospace, monospace; font-size: 11px; max-height: 240px; overflow: auto; color: var(--dsw-alias-label-primary); }
+.ssh-out-error { color: var(--dsw-alias-state-error-primary); }
 `;
 
 		async function apiGet(path) {
@@ -58,9 +58,9 @@ window.__ModuleLoader__.load({
 		}
 
 		function field(label, value, onChange, extra) {
-			return e('div', { className: 'sshm-field' },
+			return e('div', { className: 'ssh-field' },
 				e('label', null, label),
-				e('input', Object.assign({ value: value, onChange: onChange }, extra || {})))
+				e(Input, Object.assign({ value: value, onInput: onChange, onChange: onChange }, extra || {})))
 		}
 
 		function Section() {
@@ -118,10 +118,10 @@ window.__ModuleLoader__.load({
 
 			const children = []
 			children.push(e('h3', { key: 'h', style: { margin: 0 } }, 'SSH 主机'))
-			if (error) children.push(e('div', { key: 'err', className: 'sshm-error' }, error))
-			children.push(e('div', { key: 'addrow', className: 'sshm-row' },
-				e('button', { className: 'sshm-btn sshm-btn-primary', onClick: () => setForm({ authType: 'agent', port: 22, user: 'root' }) }, '+ 添加主机'),
-				e('span', { className: 'sshm-muted' }, hosts.length + ' 台主机 · 密码明文存储于 ~/.dsh/ssh-hosts.json')))
+			if (error) children.push(e('div', { key: 'err', className: 'ssh-error' }, error))
+			children.push(e('div', { key: 'addrow', className: 'ssh-row' },
+				e(Button, { variant: 'primary', onClick: () => setForm({ authType: 'agent', port: 22, user: 'root' }) }, '+ 添加主机'),
+				e('span', { className: 'ssh-muted' }, hosts.length + ' 台主机 · 密码明文存储于 ~/.dsh/ssh-hosts.json')))
 
 			if (form) {
 				const set = function (k) {
@@ -139,55 +139,55 @@ window.__ModuleLoader__.load({
 					field('端口', form.port || '', set('port'), { type: 'number' }),
 					field('用户', form.user || '', set('user')),
 				]
-				formChildren.push(e('div', { className: 'sshm-field' },
+				formChildren.push(e('div', { className: 'ssh-field' },
 					e('label', null, '认证'),
-					e('select', { value: form.authType || 'agent', onChange: set('authType') },
+					e('select', { className: 'ssh-select', value: form.authType || 'agent', onChange: set('authType') },
 						e('option', { value: 'agent' }, 'agent'),
 						e('option', { value: 'key' }, 'key'),
 						e('option', { value: 'password' }, 'password'))))
 				formChildren.push(field('私钥路径 (key)', form.keyPath || '', set('keyPath'), { placeholder: '~/.ssh/id_ed25519' }))
 				formChildren.push(field(form._editing ? '密码 (留空保持不变)' : '密码', form.password || '', set('password'), { type: 'password' }))
 				formChildren.push(field('备注', form.note || '', set('note')))
-				formChildren.push(e('div', { key: 'actions', className: 'sshm-row', style: { gridColumn: '1 / -1' } },
-					e('button', { className: 'sshm-btn sshm-btn-primary', disabled: busy || !form.id || !form.host, onClick: submit }, form._editing ? '保存' : '添加'),
-					e('button', { className: 'sshm-btn', onClick: () => setForm(null) }, '取消')))
-				children.push(e('div', { key: 'form', className: 'sshm-form' }, formChildren))
+				formChildren.push(e('div', { key: 'actions', className: 'ssh-row', style: { gridColumn: '1 / -1' } },
+					e(Button, { variant: 'primary', disabled: busy || !form.id || !form.host, onClick: submit }, form._editing ? '保存' : '添加'),
+					e(Button, { variant: 'outline', onClick: () => setForm(null) }, '取消')))
+				children.push(e('div', { key: 'form', className: 'ssh-form' }, formChildren))
 			}
 
 			if (hosts.length === 0 && !form) {
-				children.push(e('div', { key: 'empty', className: 'sshm-muted' }, '暂无主机，点击「添加主机」创建。'))
+				children.push(e('div', { key: 'empty', className: 'ssh-muted' }, '暂无主机，点击「添加主机」创建。'))
 			}
 
 			hosts.forEach(function (h) {
 				const card = []
-				card.push(e('div', { key: 'head', className: 'sshm-card-head' },
-					e('span', { className: 'sshm-title' }, h.name || h.id),
-					e('span', { className: 'sshm-muted' }, h.user + '@' + h.host + ':' + h.port + ' · ' + h.authType + (h.hasPassword ? ' · 🔑' : ''))))
-				if (h.note) card.push(e('div', { key: 'note', className: 'sshm-muted' }, h.note))
-				card.push(e('div', { key: 'ops', className: 'sshm-row' },
-					e('button', { className: 'sshm-btn', onClick: () => setForm({ id: h.id, name: h.name, host: h.host, port: h.port, user: h.user, authType: h.authType, keyPath: h.keyPath || '', note: h.note || '', _editing: h.id }) }, '编辑'),
-					e('button', { className: 'sshm-btn sshm-btn-danger', onClick: () => remove(h.id) }, '删除'),
-					e('button', { className: 'sshm-btn', onClick: () => { setRunTarget(h.id); setRunOut(null) } }, '选择运行')))
-				children.push(e('div', { key: h.id, className: 'sshm-card' }, card))
+				card.push(e('div', { key: 'head', className: 'ssh-card-head' },
+					e('span', { className: 'ssh-title' }, h.name || h.id),
+					e('span', { className: 'ssh-muted' }, h.user + '@' + h.host + ':' + h.port + ' · ' + h.authType + (h.hasPassword ? ' · 🔑' : ''))))
+				if (h.note) card.push(e('div', { key: 'note', className: 'ssh-muted' }, h.note))
+				card.push(e('div', { key: 'ops', className: 'ssh-row' },
+					e(Button, { variant: 'outline', onClick: () => setForm({ id: h.id, name: h.name, host: h.host, port: h.port, user: h.user, authType: h.authType, keyPath: h.keyPath || '', note: h.note || '', _editing: h.id }) }, '编辑'),
+					e(Button, { variant: 'ghost', onClick: () => remove(h.id) }, '删除'),
+					e(Button, { variant: 'outline', onClick: () => { setRunTarget(h.id); setRunOut(null) } }, '选择运行')))
+				children.push(e('div', { key: h.id, className: 'ssh-card' }, card))
 			})
 
 			const runChildren = []
-			runChildren.push(e('div', { key: 'rt', className: 'sshm-title' }, '远程执行测试'))
-			runChildren.push(e('div', { key: 'rr', className: 'sshm-row' },
-				e('select', { value: runTarget, onChange: function (ev) { setRunTarget(ev.target.value) } },
+			runChildren.push(e('div', { key: 'rt', className: 'ssh-title' }, '远程执行测试'))
+			runChildren.push(e('div', { key: 'rr', className: 'ssh-row' },
+				e('select', { className: 'ssh-select', value: runTarget, onChange: function (ev) { setRunTarget(ev.target.value) } },
 					e('option', { value: '' }, '选择主机…'),
 					hosts.map(function (h) { return e('option', { key: h.id, value: h.id }, h.id + ' (' + h.host + ')') })),
-				e('input', { value: runCmd, onChange: function (ev) { setRunCmd(ev.target.value) }, style: { flex: 1, minWidth: 200 }, placeholder: 'bash command' }),
-				e('button', { className: 'sshm-btn', disabled: busy || !runTarget, onClick: run }, busy ? '运行中…' : '运行')))
+				e(Input, { value: runCmd, onInput: function (ev) { setRunCmd(ev.target.value) }, onChange: function (ev) { setRunCmd(ev.target.value) }, style: { flex: 1, minWidth: 200 }, placeholder: 'bash command' }),
+				e(Button, { variant: 'outline', disabled: busy || !runTarget, onClick: run }, busy ? '运行中…' : '运行')))
 			if (runOut) {
 				const text = runOut.error
 					? ('ERROR: ' + runOut.error)
 					: ('exit=' + runOut.exitCode + (runOut.timedOut ? ' (timeout)' : '') + '\n' + (runOut.stdout || '') + (runOut.stderr ? '\n[stderr]\n' + runOut.stderr : ''))
-				runChildren.push(e('div', { key: 'out', className: 'sshm-out' + (runOut.ok === false ? ' sshm-error' : '') }, text))
+				runChildren.push(e('div', { key: 'out', className: 'ssh-out' + (runOut.ok === false ? ' ssh-error' : '') }, text))
 			}
-			children.push(e('div', { key: 'run', className: 'sshm-card' }, runChildren))
+			children.push(e('div', { key: 'run', className: 'ssh-card' }, runChildren))
 
-			return e('div', { className: 'sshm-section' }, children)
+			return e('div', { className: 'ssh-section' }, children)
 		}
 
 		function apply(ctx) {
@@ -196,10 +196,7 @@ window.__ModuleLoader__.load({
 			const style = document.createElement('style')
 			style.textContent = CSS
 			document.head.appendChild(style)
-			ctx.effect(() => {
-				style.remove()
-				return () => {}
-			}, 'dsh-ssh client css')
+			ctx.effect(() => () => { style.remove() }, 'dsh-ssh client css')
 			slots.inject('settings.section', () => slots.register(
 				{ name: 'settings.section', id: 'ssh-hosts', order: 60, label: 'SSH 主机' },
 				() => e(Section, null),
