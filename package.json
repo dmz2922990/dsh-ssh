@@ -7,12 +7,14 @@
   "exports": {
     ".": "./index.mjs",
     "./client": "./client.js",
-    "./package.json": "./package.json"
+    "./package.json": "./package.json",
+    "./webapi": "./webapi.mjs"
   },
   "files": [
     "index.mjs",
     "client.js",
-    "preset"
+    "preset",
+    "webapi.mjs"
   ],
   "license": "MIT",
   "dsh": {
