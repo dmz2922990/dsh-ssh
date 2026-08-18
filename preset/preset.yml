@@ -1,0 +1,2 @@
+name: SSH Agent
+description: 标准编码 Agent + SSH 主机管理：ssh_host_list / ssh_host_add / ssh_host_update / ssh_host_remove / ssh_bash 工具与 ssh.hosts 服务（主机配置持久化在 ~/.dsh/ssh-hosts.json）。
