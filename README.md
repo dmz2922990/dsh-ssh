@@ -16,6 +16,23 @@ DeepSeek Harness (DSH) 插件：**SSH 主机管理 + 远程 Bash 执行**。
 - 🔌 **Cordis 服务 `ssh.hosts`**（预设形态下隔离 realm，每挂载一份），其他插件可 `ctx.get('ssh.hosts')` 调用
 - 🔑 **三种认证**：`agent`（BatchMode 免交互）/ `key`（私钥）/ `password`（`SSH_ASKPASS` 机制，无需 sshpass、不申请 pty，可在受限沙箱内运行）
 
+## 正式安装（dsh plugin，推荐）
+
+```bash
+# 1. 安装到 web profile（本质是 pnpm add git 依赖）
+dsh plugin --profile web add https://github.com/dmz2922990/dsh-ssh.git
+
+# 2. 在 profile 补丁层挂载（~/.dsh/profiles/web/cordis.patch.yml 追加）：
+# - insert:
+#     - id: dsh-ssh
+#       name: dsh-ssh
+
+# 3. 重启 dsh web，所有 session（任意 preset）的 agent 直接拥有 ssh_bash 等工具
+```
+
+仓库根目录的 `package.json` / `index.mjs` 使其成为合法的 pnpm git 依赖；
+挂载在 host 层，工具对所有 preset 全局可见。
+
 ## 正式安装（Agent 预设）
 
 ```bash
