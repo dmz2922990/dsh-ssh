@@ -302,5 +302,5 @@ export function apply(ctx) {
     execute(args, exec) { return bashOnHost(args.host, args.command, args.timeoutMs, exec && exec.signal) },
   })
 
-  ctx.logger?.info?.('dsh-ssh: ssh.hosts service, ssh_* tools' + (webServer !== undefined ? ', web api' : '') + ' registered')
+  ctx.logger?.info?.('dsh-ssh: ssh.hosts service and ssh_* tools registered')
 }
