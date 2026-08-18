@@ -1,0 +1,15 @@
+{
+  "name": "dsh-ssh",
+  "version": "1.0.0",
+  "description": "DSH plugin: managed SSH hosts + remote bash execution (ssh_bash tools and ssh.hosts service)",
+  "type": "module",
+  "main": "index.mjs",
+  "exports": {
+    ".": "./index.mjs"
+  },
+  "files": [
+    "index.mjs",
+    "preset"
+  ],
+  "license": "MIT"
+}
