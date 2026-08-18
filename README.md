@@ -2,12 +2,23 @@
 
 DeepSeek Harness (DSH) 插件：**SSH 主机管理 + 远程 Bash 执行**。
 
-提供两种形态：
+提供三种形态：
 
 | 形态 | 位置 | 适用 |
 |---|---|---|
-| **Agent 预设（正式安装，推荐）** | [`preset/`](preset/) | 每个使用该预设的新 session 自动获得全部 SSH 工具与服务，重启持久 |
+| **Host 插件（`dsh plugin` 安装，推荐）** | [`index.mjs`](index.mjs) / [`webapi.mjs`](webapi.mjs) / [`client.js`](client.js) | 全局挂载，所有 session 的 agent 直接获得工具；web profile 附带 GUI 设置页面 |
+| Agent 预设 | [`preset/`](preset/) | 每个使用该预设的新 session 自动获得全部 SSH 工具与服务，重启持久 |
 | 动态 Cordis 插件（会话临时） | [`plugin/`](plugin/) | 在任意会话中通过 `cordis_define` 粘贴加载，进程内有效 |
+
+## 截图
+
+### Web GUI 设置页面
+
+![设置页面](docs/screenshot/screenshot.png)
+
+### Agent 使用 ssh_bash
+
+![Agent 使用 ssh_bash](docs/screenshot/agent_using_ssh.png)
 
 ## 功能
 
@@ -26,8 +37,11 @@ dsh plugin --profile web add https://github.com/dmz2922990/dsh-ssh.git
 # - insert:
 #     - id: dsh-ssh
 #       name: dsh-ssh
+#     - id: dsh-ssh-web
+#       name: dsh-ssh/webapi
 
-# 3. 重启 dsh web，所有 session（任意 preset）的 agent 直接拥有 ssh_bash 等工具
+# 3. 重启 dsh web，所有 session（任意 preset）的 agent 直接拥有 ssh_bash 等工具，
+#    设置中出现「SSH 主机」管理页面（dsh-ssh-web 行提供 /dsh-ssh/api 后端）
 ```
 
 仓库根目录的 `package.json` / `index.mjs` 使其成为合法的 pnpm git 依赖；
