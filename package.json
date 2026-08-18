@@ -5,11 +5,19 @@
   "type": "module",
   "main": "index.mjs",
   "exports": {
-    ".": "./index.mjs"
+    ".": "./index.mjs",
+    "./client": "./client.js",
+    "./package.json": "./package.json"
   },
   "files": [
     "index.mjs",
+    "client.js",
     "preset"
   ],
-  "license": "MIT"
+  "license": "MIT",
+  "dsh": {
+    "client": {
+      "platform": "web"
+    }
+  }
 }
