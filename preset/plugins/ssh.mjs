@@ -82,7 +82,7 @@ export function apply(ctx) {
       port: h.port || 22,
       user: h.user || 'root',
       authType: (h.auth && h.auth.type) || 'agent',
-      shell: h.shell || 'bash',
+      shell: h.shell || 'auto',
       keyPath: (h.auth && h.auth.keyPath) || null,
       hasPassword: !!(h.auth && h.auth.password),
       tags: Array.isArray(h.tags) ? h.tags : [],
@@ -112,7 +112,10 @@ export function apply(ctx) {
     if (auth.keyPath) parts.push('-i ' + shellQuote(auth.keyPath))
     parts.push('-p ' + String(h.port || 22))
     parts.push(shellQuote((h.user || 'root') + '@' + h.host))
-    parts.push('-- ' + shellQuote(h.shell || 'bash') + ' -s')
+    const remoteShell = h.shell && h.shell !== 'auto' ? h.shell : null
+    parts.push('-- ' + (remoteShell
+      ? shellQuote(remoteShell) + ' -s'
+      : shellQuote('command -v bash >/dev/null 2>&1 && exec bash -s || exec sh -s')))
     return parts.join(' ')
   }
 
@@ -231,7 +234,7 @@ export function apply(ctx) {
         keyPath: { type: 'string', description: 'Private key path for authType=key' },
         password: { type: 'string', description: 'Password for authType=password' },
         note: { type: 'string', description: 'Optional note' },
-        shell: { type: 'string', description: "Remote shell for scripts (default 'bash'; use 'ash'/'sh' on BusyBox/embedded devices)" },
+        shell: { type: 'string', description: "Remote shell for scripts; default 'auto' (bash preferred, falls back to sh/ash)" },
       },
       required: ['id', 'host'],
     },
@@ -259,7 +262,7 @@ export function apply(ctx) {
         keyPath: S('Private key path'),
         password: S('Password (leave out to keep the current one)'),
         note: S('Note'),
-        shell: S("Remote shell (default 'bash'; use 'ash'/'sh' on BusyBox devices)"),
+        shell: S("Remote shell; default 'auto' (bash preferred, falls back to sh/ash)"),
       },
       required: ['id'],
     },
@@ -290,14 +293,14 @@ export function apply(ctx) {
 
   ctx.tools.register({
     name: 'ssh_bash',
-    description: 'Run a bash script on a managed SSH host. The script is executed via `<shell> -s` over SSH (default bash; set the host shell or the shell param to ash/sh on BusyBox devices) with stdin, so multi-line scripts, loops and pipes all work. Reference a host by id, name, or user@host.',
+    description: 'Run a bash script on a managed SSH host. The script is executed over SSH with auto shell detection (prefers bash, falls back to sh/ash on BusyBox/embedded devices); a host or call-level shell setting forces a specific one with stdin, so multi-line scripts, loops and pipes all work. Reference a host by id, name, or user@host.',
     parameters: {
       type: 'object',
       properties: {
         host: { type: 'string', description: 'Host id, name, or user@host from the managed list' },
         command: { type: 'string', description: 'Bash script to execute remotely' },
         timeoutMs: { type: 'number', description: 'Timeout in ms (default 120000, max 600000)' },
-        shell: { type: 'string', description: "Remote shell to run the script with (default: the host's configured shell, fallback 'bash'; use 'ash' or 'sh' on BusyBox/embedded devices)" },
+        shell: { type: 'string', description: "Force a remote shell (e.g. 'bash'/'ash'/'sh'). Default: auto — prefers bash and falls back to sh/ash on BusyBox/embedded devices" },
       },
       required: ['host', 'command'],
     },
