@@ -31,7 +31,7 @@ window.__ModuleLoader__.load({
 .ssh-form { display: grid; grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); gap: 10px; border: 1px solid var(--dsw-alias-border-l1); border-radius: 10px; padding: 12px; background: var(--dsw-alias-bg-layer-2); }
 .ssh-field { display: flex; flex-direction: column; gap: 4px; }
 .ssh-field > label { font-size: 11px; color: var(--dsw-alias-label-secondary); }
-.ssh-select { padding: 5px 8px; border: 1px solid var(--dsw-alias-border-l2); border-radius: 6px; background: var(--dsw-alias-bg-layer-1); color: var(--dsw-alias-label-primary); font-size: 12px; }
+.ssh-select { box-sizing: border-box; width: 100%; height: 30px; padding: 0 8px; border: 1px solid var(--dsw-alias-border-l2); border-radius: 6px; background: var(--dsw-alias-bg-layer-1); color: var(--dsw-alias-label-primary); font-size: 13px; appearance: auto; }
 .ssh-out { background: var(--dsw-alias-bg-layer-2); border: 1px solid var(--dsw-alias-border-l1); border-radius: 8px; padding: 10px; white-space: pre-wrap; font-family: ui-monospace, monospace; font-size: 11px; max-height: 240px; overflow: auto; color: var(--dsw-alias-label-primary); }
 .ssh-out-error { color: var(--dsw-alias-state-error-primary); }
 `;
@@ -150,7 +150,7 @@ window.__ModuleLoader__.load({
 				formChildren.push(e('div', { className: 'ssh-field' },
 					e('label', null, '远端 Shell'),
 					e('select', { className: 'ssh-select', value: form.shell || 'auto', onChange: set('shell') },
-						e('option', { value: 'auto' }, '自动（优先 bash，回落 sh/ash）'),
+						e('option', { value: 'auto', title: '优先 bash，无 bash 时回落 sh/ash' }, '自动'),
 						e('option', { value: 'bash' }, 'bash'),
 						e('option', { value: 'ash' }, 'ash (BusyBox)'),
 						e('option', { value: 'sh' }, 'sh'))))
