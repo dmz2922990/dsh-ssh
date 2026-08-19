@@ -27,8 +27,8 @@ export function apply(ctx) {
     res.end(JSON.stringify(value))
   }
 
-  async function bashOnHost(host, command, timeoutMs) {
-    return ssh.bash(host, command, timeoutMs)
+  async function bashOnHost(host, command, timeoutMs, shell) {
+    return ssh.bash(host, command, timeoutMs, shell)
   }
 
   const api = async (req, res) => {
@@ -41,7 +41,7 @@ export function apply(ctx) {
       if (method === 'POST' && path === '/dsh-ssh/api/hosts') {
         const body = await readBody(req)
         return send(res, 200, await ssh.add({
-          id: body.id, name: body.name, host: body.host, port: body.port, user: body.user, note: body.note,
+          id: body.id, name: body.name, host: body.host, port: body.port, user: body.user, note: body.note, shell: body.shell,
           auth: { type: body.authType, keyPath: body.keyPath, password: body.password },
         }))
       }
@@ -49,7 +49,7 @@ export function apply(ctx) {
         const id = decodeURIComponent(path.slice('/dsh-ssh/api/hosts/'.length))
         const body = await readBody(req)
         const patch = {}
-        for (const key of ['host', 'name', 'port', 'user', 'note']) {
+        for (const key of ['host', 'name', 'port', 'user', 'note', 'shell']) {
           if (body[key] !== undefined) patch[key] = body[key]
         }
         if (body.authType !== undefined || body.keyPath !== undefined || body.password !== undefined) {
@@ -63,7 +63,7 @@ export function apply(ctx) {
       }
       if (method === 'POST' && path === '/dsh-ssh/api/bash') {
         const body = await readBody(req)
-        return send(res, 200, await bashOnHost(body.host, body.command, body.timeoutMs || 60000))
+        return send(res, 200, await bashOnHost(body.host, body.command, body.timeoutMs || 60000, body.shell))
       }
       return send(res, 404, { error: 'not found: ' + method + ' ' + path })
     } catch (e) {

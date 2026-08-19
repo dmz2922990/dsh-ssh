@@ -82,6 +82,7 @@ export function apply(ctx) {
       port: h.port || 22,
       user: h.user || 'root',
       authType: (h.auth && h.auth.type) || 'agent',
+      shell: h.shell || 'bash',
       keyPath: (h.auth && h.auth.keyPath) || null,
       hasPassword: !!(h.auth && h.auth.password),
       tags: Array.isArray(h.tags) ? h.tags : [],
@@ -111,7 +112,7 @@ export function apply(ctx) {
     if (auth.keyPath) parts.push('-i ' + shellQuote(auth.keyPath))
     parts.push('-p ' + String(h.port || 22))
     parts.push(shellQuote((h.user || 'root') + '@' + h.host))
-    parts.push('-- bash -s')
+    parts.push('-- ' + shellQuote(h.shell || 'bash') + ' -s')
     return parts.join(' ')
   }
 
@@ -124,14 +125,15 @@ export function apply(ctx) {
       || h.host.toLowerCase() === lower)
   }
 
-  async function bashOnHost(ref, command, timeoutMs, signal) {
+  async function bashOnHost(ref, command, timeoutMs, signal, shellOverride) {
     const h = await findHost(ref)
     if (!h) {
       return { ok: false, error: 'host not found: ' + ref, knownHosts: (await load()).map(publicHost) }
     }
     if (h.auth && h.auth.type === 'password' && h.auth.password) await ensureAskpass()
+    const runHost = shellOverride !== undefined ? Object.assign({}, h, { shell: shellOverride }) : h
     const request = {
-      command: buildSshCommand(h),
+      command: buildSshCommand(runHost),
       stdin: String(command),
       timeoutMs: Math.min(Math.max(Number(timeoutMs) || 120000, 1000), 600000),
       stdoutMaxBytes: 200000,
@@ -165,6 +167,7 @@ export function apply(ctx) {
         host: input.host,
         port: input.port || 22,
         user: input.user || 'root',
+        shell: input.shell,
         auth: normalizeAuth(input.auth),
         tags: Array.isArray(input.tags) ? input.tags : [],
         note: input.note,
@@ -177,7 +180,7 @@ export function apply(ctx) {
       const list = await load()
       const h = list.find((x) => x.id === id)
       if (!h) throw new Error('host not found: ' + id)
-      for (const key of ['host', 'name', 'port', 'user', 'note']) {
+      for (const key of ['host', 'name', 'port', 'user', 'note', 'shell']) {
         if (patch[key] !== undefined) h[key] = patch[key]
       }
       if (patch.tags !== undefined) h.tags = Array.isArray(patch.tags) ? patch.tags : []
@@ -198,7 +201,7 @@ export function apply(ctx) {
       await save()
       return true
     },
-    async bash(ref, command, timeoutMs) { return bashOnHost(ref, command, timeoutMs) },
+    async bash(ref, command, timeoutMs, shell) { return bashOnHost(ref, command, timeoutMs, undefined, shell) },
   }
 
   ctx.provide('ssh.hosts', service)
@@ -228,13 +231,14 @@ export function apply(ctx) {
         keyPath: { type: 'string', description: 'Private key path for authType=key' },
         password: { type: 'string', description: 'Password for authType=password' },
         note: { type: 'string', description: 'Optional note' },
+        shell: { type: 'string', description: "Remote shell for scripts (default 'bash'; use 'ash'/'sh' on BusyBox/embedded devices)" },
       },
       required: ['id', 'host'],
     },
     output: jsonOut(),
     execute(args) {
       return service.add({
-        id: args.id, host: args.host, port: args.port, user: args.user, name: args.name, note: args.note,
+        id: args.id, host: args.host, port: args.port, user: args.user, name: args.name, note: args.note, shell: args.shell,
         auth: { type: args.authType, keyPath: args.keyPath, password: args.password },
       })
     },
@@ -255,13 +259,14 @@ export function apply(ctx) {
         keyPath: S('Private key path'),
         password: S('Password (leave out to keep the current one)'),
         note: S('Note'),
+        shell: S("Remote shell (default 'bash'; use 'ash'/'sh' on BusyBox devices)"),
       },
       required: ['id'],
     },
     output: jsonOut(),
     execute(args) {
       const patch = {}
-      for (const key of ['host', 'port', 'user', 'name', 'note']) {
+      for (const key of ['host', 'port', 'user', 'name', 'note', 'shell']) {
         if (args[key] !== undefined) patch[key] = args[key]
       }
       if (args.authType !== undefined || args.keyPath !== undefined || args.password !== undefined) {
@@ -285,19 +290,20 @@ export function apply(ctx) {
 
   ctx.tools.register({
     name: 'ssh_bash',
-    description: 'Run a bash script on a managed SSH host. The script is executed via `bash -s` over SSH with stdin, so multi-line scripts, loops and pipes all work. Reference a host by id, name, or user@host.',
+    description: 'Run a bash script on a managed SSH host. The script is executed via `<shell> -s` over SSH (default bash; set the host shell or the shell param to ash/sh on BusyBox devices) with stdin, so multi-line scripts, loops and pipes all work. Reference a host by id, name, or user@host.',
     parameters: {
       type: 'object',
       properties: {
         host: { type: 'string', description: 'Host id, name, or user@host from the managed list' },
         command: { type: 'string', description: 'Bash script to execute remotely' },
         timeoutMs: { type: 'number', description: 'Timeout in ms (default 120000, max 600000)' },
+        shell: { type: 'string', description: "Remote shell to run the script with (default: the host's configured shell, fallback 'bash'; use 'ash' or 'sh' on BusyBox/embedded devices)" },
       },
       required: ['host', 'command'],
     },
     output: jsonOut(),
     timeoutMs: 610000,
-    execute(args, exec) { return bashOnHost(args.host, args.command, args.timeoutMs, exec && exec.signal) },
+    execute(args, exec) { return bashOnHost(args.host, args.command, args.timeoutMs, exec && exec.signal, args.shell) },
   })
 
   ctx.logger?.info?.('dsh-ssh: ssh.hosts service and ssh_* tools registered')

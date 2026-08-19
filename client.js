@@ -88,7 +88,7 @@ window.__ModuleLoader__.load({
 					const payload = clean({
 						id: form.id, name: form.name || form.id, host: form.host,
 						port: form.port ? Number(form.port) : 22, user: form.user || 'root',
-						authType: form.authType || 'agent', keyPath: form.keyPath || '',
+						authType: form.authType || 'agent', keyPath: form.keyPath || '', shell: form.shell || 'bash',
 						password: form.password || '', note: form.note || '',
 					})
 					const r = form._editing
@@ -147,6 +147,12 @@ window.__ModuleLoader__.load({
 						e('option', { value: 'password' }, 'password'))))
 				formChildren.push(field('私钥路径 (key)', form.keyPath || '', set('keyPath'), { placeholder: '~/.ssh/id_ed25519' }))
 				formChildren.push(field(form._editing ? '密码 (留空保持不变)' : '密码', form.password || '', set('password'), { type: 'password' }))
+				formChildren.push(e('div', { className: 'ssh-field' },
+					e('label', null, '远端 Shell'),
+					e('select', { className: 'ssh-select', value: form.shell || 'bash', onChange: set('shell') },
+						e('option', { value: 'bash' }, 'bash'),
+						e('option', { value: 'ash' }, 'ash (BusyBox)'),
+						e('option', { value: 'sh' }, 'sh'))))
 				formChildren.push(field('备注', form.note || '', set('note')))
 				formChildren.push(e('div', { key: 'actions', className: 'ssh-row', style: { gridColumn: '1 / -1' } },
 					e(Button, { variant: 'primary', disabled: busy || !form.id || !form.host, onClick: submit }, form._editing ? '保存' : '添加'),
@@ -162,10 +168,10 @@ window.__ModuleLoader__.load({
 				const card = []
 				card.push(e('div', { key: 'head', className: 'ssh-card-head' },
 					e('span', { className: 'ssh-title' }, h.name || h.id),
-					e('span', { className: 'ssh-muted' }, h.user + '@' + h.host + ':' + h.port + ' · ' + h.authType + (h.hasPassword ? ' · 🔑' : ''))))
+					e('span', { className: 'ssh-muted' }, h.user + '@' + h.host + ':' + h.port + ' · ' + h.authType + ' · ' + (h.shell || 'bash') + (h.hasPassword ? ' · 🔑' : ''))))
 				if (h.note) card.push(e('div', { key: 'note', className: 'ssh-muted' }, h.note))
 				card.push(e('div', { key: 'ops', className: 'ssh-row' },
-					e(Button, { variant: 'outline', onClick: () => setForm({ id: h.id, name: h.name, host: h.host, port: h.port, user: h.user, authType: h.authType, keyPath: h.keyPath || '', note: h.note || '', _editing: h.id }) }, '编辑'),
+					e(Button, { variant: 'outline', onClick: () => setForm({ id: h.id, name: h.name, host: h.host, port: h.port, user: h.user, authType: h.authType, keyPath: h.keyPath || '', shell: h.shell || 'bash', note: h.note || '', _editing: h.id }) }, '编辑'),
 					e(Button, { variant: 'ghost', onClick: () => remove(h.id) }, '删除'),
 					e(Button, { variant: 'outline', onClick: () => { setRunTarget(h.id); setRunOut(null) } }, '选择运行')))
 				children.push(e('div', { key: h.id, className: 'ssh-card' }, card))
