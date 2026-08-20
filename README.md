@@ -26,7 +26,7 @@ DeepSeek Harness (DSH) 插件：**SSH 主机管理 + 远程 Bash 执行**。
 - 🔧 **模型工具**：`ssh_host_list` / `ssh_host_add` / `ssh_host_update` / `ssh_host_remove` / `ssh_host_copy` / `ssh_bash` / `ssh_upload` / `ssh_download`
 - 🔌 **Cordis 服务 `ssh.hosts`**（预设形态下隔离 realm，每挂载一份），其他插件可 `ctx.get('ssh.hosts')` 调用
 - 🔑 **三种认证**：`agent`（BatchMode 免交互）/ `key`（私钥）/ `password`（`SSH_ASKPASS` 机制，无需 sshpass、不申请 pty，可在受限沙箱内运行）
-- 📦 **文件传输**：`ssh_upload` / `ssh_download`（≤8MB，base64 over ssh，无需 scp，BusyBox 设备可用；父目录自动创建）
+- 📦 **文件传输**：`ssh_upload` / `ssh_download`（≤128MB，base64 over ssh，无需 scp，BusyBox 设备可用；父目录自动创建）
 - 🐚 **自适应远端 Shell**：默认优先 `bash`、无则回落 `sh`/`ash`（BusyBox/嵌入式设备），可按主机或按次调用强制指定
 
 ## 正式安装（dsh plugin，推荐）
@@ -107,8 +107,8 @@ await ssh.add({ id, host, port, user, name, note, auth: { type, keyPath, passwor
 await ssh.update(id, patch)             // 部分字段更新；auth 留空字段保持原值
 await ssh.remove(id)
 await ssh.bash(ref, command, timeoutMs) // { ok, exitCode, stdout, stderr, timedOut, ... }
-await ssh.upload(ref, localPath, remotePath)    // { ok, bytes, ... } ≤8MB
-await ssh.download(ref, remotePath, localPath)  // { ok, bytes, ... } ≤8MB
+await ssh.upload(ref, localPath, remotePath)    // { ok, bytes, ... } ≤128MB
+await ssh.download(ref, remotePath, localPath)  // { ok, bytes, ... } ≤128MB
 await ssh.copy(ref, { id, host, name })         // 克隆主机配置（含认证）
 ```
 

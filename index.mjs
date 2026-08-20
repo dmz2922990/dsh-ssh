@@ -158,7 +158,8 @@ export function apply(ctx) {
     }
   }
 
-  const MAX_FILE_BYTES = 8 * 1024 * 1024
+  const MAX_FILE_BYTES = 128 * 1024 * 1024
+  const TRANSFER_TIMEOUT_MS = 30 * 60 * 1000
 
   function expandLocalPath(p) {
     if (p === '~') return homeDir
@@ -181,7 +182,7 @@ export function apply(ctx) {
     const result = await shell.run(shell.resolve({
       command: command(h),
       ...(stdin !== undefined ? { stdin } : {}),
-      timeoutMs: 600000,
+      timeoutMs: TRANSFER_TIMEOUT_MS,
       stdoutMaxBytes: stdoutMaxBytes === undefined ? 2000 : stdoutMaxBytes,
     }))
     return {
@@ -237,7 +238,7 @@ export function apply(ctx) {
     const target = await fs.resolve(localPath)
     const bytes = await fs.readBytes(target, undefined, MAX_FILE_BYTES + 1)
     if (bytes.length > MAX_FILE_BYTES) {
-      return { ok: false, error: 'file exceeds the 8MB transfer limit: ' + localPath + ' (' + bytes.length + ' bytes)' }
+      return { ok: false, error: '文件超过 128MB 传输上限: ' + localPath + ' (' + bytes.length + ' bytes)' }
     }
     const b64 = Buffer.from(bytes).toString('base64')
     const dir = remotePath.replace(/[^/]*$/, '')
@@ -470,7 +471,7 @@ export function apply(ctx) {
 
   ctx.tools.register({
     name: 'ssh_upload',
-    description: 'Upload a local file to a managed SSH host (base64 over ssh, ≤8MB, works on BusyBox devices). Parent directories are created automatically.',
+    description: 'Upload a local file to a managed SSH host (base64 over ssh, ≤128MB, works on BusyBox devices). Parent directories are created automatically.',
     parameters: {
       type: 'object',
       properties: {
@@ -487,7 +488,7 @@ export function apply(ctx) {
 
   ctx.tools.register({
     name: 'ssh_download',
-    description: 'Download a file from a managed SSH host to the local machine (base64 over ssh, ≤8MB, works on BusyBox devices). Parent directories are created automatically.',
+    description: 'Download a file from a managed SSH host to the local machine (base64 over ssh, ≤128MB, works on BusyBox devices). Parent directories are created automatically.',
     parameters: {
       type: 'object',
       properties: {

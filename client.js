@@ -222,7 +222,7 @@ window.__ModuleLoader__.load({
 
 			// ── file transfer panel ─────────────────────────────────────────────
 			const txChildren = []
-			txChildren.push(e('div', { key: 'tt', className: 'ssh-title' }, '文件传输（≤8MB，base64 over ssh）'))
+			txChildren.push(e('div', { key: 'tt', className: 'ssh-title' }, '文件传输（≤128MB，base64 over ssh）'))
 			txChildren.push(e('div', { key: 'tr1', className: 'ssh-row' },
 				e('select', { className: 'ssh-select', value: txHost, onChange: function (ev) { setTxHost(ev.target.value) } },
 					e('option', { value: '' }, '选择主机…'),
