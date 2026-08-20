@@ -57,6 +57,11 @@ export function apply(ctx) {
         }
         return send(res, 200, await ssh.update(id, patch))
       }
+      if (method === 'POST' && path.startsWith('/dsh-ssh/api/hosts/') && path.endsWith('/copy')) {
+        const id = decodeURIComponent(path.slice('/dsh-ssh/api/hosts/'.length, -'/copy'.length))
+        const body = await readBody(req)
+        return send(res, 200, await ssh.copy(id, { id: body.id, host: body.host, name: body.name, port: body.port, user: body.user }))
+      }
       if (method === 'DELETE' && path.startsWith('/dsh-ssh/api/hosts/')) {
         const id = decodeURIComponent(path.slice('/dsh-ssh/api/hosts/'.length))
         return send(res, 200, { ok: await ssh.remove(id) })
