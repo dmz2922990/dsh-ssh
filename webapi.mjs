@@ -70,6 +70,14 @@ export function apply(ctx) {
         const body = await readBody(req)
         return send(res, 200, await bashOnHost(body.host, body.command, body.timeoutMs || 60000, body.shell))
       }
+      if (method === 'POST' && path === '/dsh-ssh/api/upload') {
+        const body = await readBody(req)
+        return send(res, 200, await ssh.upload(body.host, body.localPath, body.remotePath))
+      }
+      if (method === 'POST' && path === '/dsh-ssh/api/download') {
+        const body = await readBody(req)
+        return send(res, 200, await ssh.download(body.host, body.remotePath, body.localPath))
+      }
       return send(res, 404, { error: 'not found: ' + method + ' ' + path })
     } catch (e) {
       return send(res, 400, { error: String(e && e.message || e) })

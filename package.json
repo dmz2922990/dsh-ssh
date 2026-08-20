@@ -1,6 +1,6 @@
 {
   "name": "dsh-ssh",
-  "version": "1.1.2",
+  "version": "1.2.0",
   "description": "DSH plugin: managed SSH hosts + remote bash execution (ssh_bash tools and ssh.hosts service)",
   "type": "module",
   "main": "index.mjs",

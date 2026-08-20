@@ -96,7 +96,7 @@ export function apply(ctx) {
     return { type, keyPath: auth.keyPath, password: auth.password }
   }
 
-  function buildSshCommand(h) {
+  function buildSshPrefix(h) {
     const auth = normalizeAuth(h.auth)
     const parts = []
     if (auth.type === 'password' && auth.password) {
@@ -112,11 +112,14 @@ export function apply(ctx) {
     if (auth.keyPath) parts.push('-i ' + shellQuote(auth.keyPath))
     parts.push('-p ' + String(h.port || 22))
     parts.push(shellQuote((h.user || 'root') + '@' + h.host))
-    const remoteShell = h.shell && h.shell !== 'auto' ? h.shell : null
-    parts.push('-- ' + (remoteShell
-      ? shellQuote(remoteShell) + ' -s'
-      : shellQuote('command -v bash >/dev/null 2>&1 && exec bash -s || exec sh -s')))
     return parts.join(' ')
+  }
+
+  function buildSshCommand(h) {
+    const remoteShell = h.shell && h.shell !== 'auto' ? h.shell : null
+    return buildSshPrefix(h) + ' -- ' + (remoteShell
+      ? shellQuote(remoteShell) + ' -s'
+      : shellQuote('command -v bash >/dev/null 2>&1 && exec bash -s || exec sh -s'))
   }
 
   async function findHost(ref) {
@@ -153,6 +156,64 @@ export function apply(ctx) {
       stderr: (result.stderr && result.stderr.text) || '',
       stderrTruncated: !!(result.stderr && result.stderr.truncated),
     }
+  }
+
+  const MAX_FILE_BYTES = 8 * 1024 * 1024
+
+  async function runOnHost(ref, command, stdin, stdoutMaxBytes) {
+    const h = await findHost(ref)
+    if (!h) {
+      return { ok: false, error: 'host not found: ' + ref, knownHosts: (await load()).map(publicHost) }
+    }
+    if (h.auth && h.auth.type === 'password' && h.auth.password) await ensureAskpass()
+    const result = await shell.run(shell.resolve({
+      command: command(h),
+      ...(stdin !== undefined ? { stdin } : {}),
+      timeoutMs: 600000,
+      stdoutMaxBytes: stdoutMaxBytes === undefined ? 2000 : stdoutMaxBytes,
+    }))
+    return {
+      host: h.id,
+      ok: result.exitCode === 0 && !result.timedOut,
+      exitCode: result.exitCode,
+      timedOut: result.timedOut,
+      stderr: (result.stderr && result.stderr.text) || '',
+    }
+  }
+
+  async function uploadToHost(ref, localPath, remotePath) {
+    const target = await fs.resolve(localPath)
+    const bytes = await fs.readBytes(target, undefined, MAX_FILE_BYTES + 1)
+    if (bytes.length > MAX_FILE_BYTES) {
+      return { ok: false, error: 'file exceeds the 8MB transfer limit: ' + localPath + ' (' + bytes.length + ' bytes)' }
+    }
+    const b64 = Buffer.from(bytes).toString('base64')
+    const dir = remotePath.replace(/[^/]*$/, '')
+    const remoteCmd = (dir ? 'mkdir -p ' + shellQuote(dir) + ' && ' : '')
+      + 'base64 -d > ' + shellQuote(remotePath) + ' && wc -c < ' + shellQuote(remotePath)
+    const res = await runOnHost(ref, (h) => buildSshPrefix(h) + ' -- ' + shellQuote(remoteCmd), b64, 2000)
+    return Object.assign(res, {
+      direction: 'upload',
+      localPath,
+      remotePath,
+      bytes: res.ok ? bytes.length : undefined,
+    })
+  }
+
+  async function downloadFromHost(ref, remotePath, localPath) {
+    const dir = localPath.replace(/[^/]*$/, '')
+    const res = await runOnHost(ref, (h) => 'set -o pipefail 2>/dev/null; ' + buildSshPrefix(h)
+      + ' -- ' + shellQuote('base64 ' + shellQuote(remotePath))
+      + ' | { mkdir -p ' + shellQuote(dir || '.') + ' && base64 -D 2>/dev/null || base64 -d; } > ' + shellQuote(localPath))
+    if (res.ok) {
+      try {
+        const info = await fs.stat(await fs.resolve(localPath))
+        res.bytes = info && info.type === 'file' ? info.size : -1
+      } catch {
+        res.bytes = -1
+      }
+    }
+    return Object.assign(res, { direction: 'download', localPath, remotePath })
   }
 
   const service = {
@@ -224,6 +285,8 @@ export function apply(ctx) {
       return true
     },
     async bash(ref, command, timeoutMs, shell) { return bashOnHost(ref, command, timeoutMs, undefined, shell) },
+    async upload(ref, localPath, remotePath) { return uploadToHost(ref, localPath, remotePath) },
+    async download(ref, remotePath, localPath) { return downloadFromHost(ref, remotePath, localPath) },
   }
 
   ctx.provide('ssh.hosts', service)
@@ -345,6 +408,40 @@ export function apply(ctx) {
     output: jsonOut(),
     timeoutMs: 610000,
     execute(args, exec) { return bashOnHost(args.host, args.command, args.timeoutMs, exec && exec.signal, args.shell) },
+  })
+
+  ctx.tools.register({
+    name: 'ssh_upload',
+    description: 'Upload a local file to a managed SSH host (base64 over ssh, ≤8MB, works on BusyBox devices). Parent directories are created automatically.',
+    parameters: {
+      type: 'object',
+      properties: {
+        host: { type: 'string', description: 'Host id, name, or user@host from the managed list' },
+        localPath: { type: 'string', description: 'Absolute local file path to read' },
+        remotePath: { type: 'string', description: 'Absolute remote destination path' },
+      },
+      required: ['host', 'localPath', 'remotePath'],
+    },
+    output: jsonOut(),
+    timeoutMs: 610000,
+    execute(args) { return uploadToHost(args.host, args.localPath, args.remotePath) },
+  })
+
+  ctx.tools.register({
+    name: 'ssh_download',
+    description: 'Download a file from a managed SSH host to the local machine (base64 over ssh, ≤8MB, works on BusyBox devices). Parent directories are created automatically.',
+    parameters: {
+      type: 'object',
+      properties: {
+        host: { type: 'string', description: 'Host id, name, or user@host from the managed list' },
+        remotePath: { type: 'string', description: 'Absolute remote file path to read' },
+        localPath: { type: 'string', description: 'Absolute local destination path' },
+      },
+      required: ['host', 'remotePath', 'localPath'],
+    },
+    output: jsonOut(),
+    timeoutMs: 610000,
+    execute(args) { return downloadFromHost(args.host, args.remotePath, args.localPath) },
   })
 
   ctx.logger?.info?.('dsh-ssh: ssh.hosts service and ssh_* tools registered')

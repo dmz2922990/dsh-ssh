@@ -71,6 +71,11 @@ window.__ModuleLoader__.load({
 			const [runCmd, setRunCmd] = React.useState('hostname && uptime')
 			const [runOut, setRunOut] = React.useState(null)
 			const [busy, setBusy] = React.useState(false)
+			const [txHost, setTxHost] = React.useState('')
+			const [txDir, setTxDir] = React.useState('upload')
+			const [txLocal, setTxLocal] = React.useState('')
+			const [txRemote, setTxRemote] = React.useState('')
+			const [txOut, setTxOut] = React.useState(null)
 
 			async function refresh() {
 				try {
@@ -115,6 +120,18 @@ window.__ModuleLoader__.load({
 					const r = await apiSend('POST', '/dsh-ssh/api/bash', { host: runTarget, command: runCmd, timeoutMs: 60000 })
 					setRunOut(r || { error: 'no response' })
 				} catch (err) { setRunOut({ error: String(err && err.message || err) }) }
+				setBusy(false)
+			}
+
+			async function transfer() {
+				setBusy(true); setTxOut(null)
+				try {
+					const body = txDir === 'upload'
+						? { host: txHost, localPath: txLocal, remotePath: txRemote }
+						: { host: txHost, remotePath: txRemote, localPath: txLocal }
+					const r = await apiSend('POST', txDir === 'upload' ? '/dsh-ssh/api/upload' : '/dsh-ssh/api/download', body)
+					setTxOut(r || { error: 'no response' })
+				} catch (err) { setTxOut({ error: String(err && err.message || err) }) }
 				setBusy(false)
 			}
 
@@ -202,6 +219,29 @@ window.__ModuleLoader__.load({
 				runChildren.push(e('div', { key: 'out', className: 'ssh-out' + (runOut.ok === false ? ' ssh-error' : '') }, text))
 			}
 			children.push(e('div', { key: 'run', className: 'ssh-card' }, runChildren))
+
+			// ── file transfer panel ─────────────────────────────────────────────
+			const txChildren = []
+			txChildren.push(e('div', { key: 'tt', className: 'ssh-title' }, '文件传输（≤8MB，base64 over ssh）'))
+			txChildren.push(e('div', { key: 'tr1', className: 'ssh-row' },
+				e('select', { className: 'ssh-select', value: txHost, onChange: function (ev) { setTxHost(ev.target.value) } },
+					e('option', { value: '' }, '选择主机…'),
+					hosts.map(function (h) { return e('option', { key: h.id, value: h.id }, h.id + ' (' + h.host + ')') })),
+				e('select', { className: 'ssh-select', value: txDir, onChange: function (ev) { setTxDir(ev.target.value) } },
+					e('option', { value: 'upload' }, '上传：本地 → 远端'),
+					e('option', { value: 'download' }, '下载：远端 → 本地')),
+				e(Input, { value: txLocal, onInput: function (ev) { setTxLocal(ev.target.value) }, onChange: function (ev) { setTxLocal(ev.target.value) }, style: { flex: 1, minWidth: 180 }, placeholder: txDir === 'upload' ? '本地路径，如 /tmp/a.bin' : '保存到本地路径' }),
+				e(Input, { value: txRemote, onInput: function (ev) { setTxRemote(ev.target.value) }, onChange: function (ev) { setTxRemote(ev.target.value) }, style: { flex: 1, minWidth: 180 }, placeholder: txDir === 'upload' ? '远端目标路径' : '远端文件路径，如 /etc/config.conf' }),
+				e(Button, { variant: 'primary', disabled: busy || !txHost || !txLocal || !txRemote, onClick: transfer }, busy ? '传输中…' : (txDir === 'upload' ? '上传' : '下载'))))
+			if (txOut) {
+				const text = txOut.error
+					? ('ERROR: ' + txOut.error)
+					: (txOut.ok
+						? (txOut.direction + ' 完成 · ' + (txOut.bytes === undefined ? '?' : txOut.bytes) + ' 字节 · ' + (txOut.direction === 'upload' ? txOut.remotePath : txOut.localPath))
+						: ('失败 exit=' + txOut.exitCode + (txOut.stderr ? '\n' + txOut.stderr : '')))
+				txChildren.push(e('div', { key: 'out', className: 'ssh-out' + (txOut.ok === false || txOut.error ? ' ssh-error' : '') }, text))
+			}
+			children.push(e('div', { key: 'tx', className: 'ssh-card' }, txChildren))
 
 			return e('div', { className: 'ssh-section' }, children)
 		}
