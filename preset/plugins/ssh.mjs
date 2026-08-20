@@ -160,6 +160,18 @@ export function apply(ctx) {
 
   const MAX_FILE_BYTES = 8 * 1024 * 1024
 
+  function expandLocalPath(p) {
+    if (p === '~') return homeDir
+    if (p.startsWith('~/')) return homeDir + p.slice(1)
+    return p
+  }
+
+  function checkLocalPath(p) {
+    if (typeof p !== 'string' || !p.trim()) return '本地路径不能为空（需包含文件名的绝对路径，如 /Users/me/Downloads/config.conf）'
+    if (p.endsWith('/')) return '本地路径需要包含文件名，不能以 / 结尾：' + p
+    return null
+  }
+
   async function runOnHost(ref, command, stdin, stdoutMaxBytes) {
     const h = await findHost(ref)
     if (!h) {
@@ -182,6 +194,13 @@ export function apply(ctx) {
   }
 
   async function uploadToHost(ref, localPath, remotePath) {
+    if (typeof remotePath !== 'string' || !remotePath.trim()) {
+      return { ok: false, error: '远端路径不能为空（需包含文件名的绝对路径，如 /tmp/config.conf）' }
+    }
+    const localErr = checkLocalPath(localPath)
+    if (localErr) return { ok: false, error: localErr }
+    await ensureHome()
+    localPath = expandLocalPath(localPath)
     const target = await fs.resolve(localPath)
     const bytes = await fs.readBytes(target, undefined, MAX_FILE_BYTES + 1)
     if (bytes.length > MAX_FILE_BYTES) {
@@ -201,6 +220,13 @@ export function apply(ctx) {
   }
 
   async function downloadFromHost(ref, remotePath, localPath) {
+    if (typeof remotePath !== 'string' || !remotePath.trim()) {
+      return { ok: false, error: '远端路径不能为空' }
+    }
+    const localErr = checkLocalPath(localPath)
+    if (localErr) return { ok: false, error: localErr }
+    await ensureHome()
+    localPath = expandLocalPath(localPath)
     const dir = localPath.replace(/[^/]*$/, '')
     const res = await runOnHost(ref, (h) => 'set -o pipefail 2>/dev/null; ' + buildSshPrefix(h)
       + ' -- ' + shellQuote('base64 ' + shellQuote(remotePath))
