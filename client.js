@@ -180,6 +180,7 @@ window.__ModuleLoader__.load({
 					e('span', { className: 'ssh-muted' }, h.user + '@' + h.host + ':' + h.port + ' · ' + h.authType + ' · shell:' + (h.shell === 'auto' || !h.shell ? '自动' : h.shell) + (h.hasPassword ? ' · 🔑' : ''))))
 				if (h.note) card.push(e('div', { key: 'note', className: 'ssh-muted' }, h.note))
 				card.push(e('div', { key: 'ops', className: 'ssh-row' },
+					e(Button, { variant: 'outline', onClick: () => setForm({ id: h.id + '-copy', name: h.name ? h.name + '-copy' : '', host: h.host, port: h.port, user: h.user, authType: h.authType, keyPath: h.keyPath || '', shell: h.shell || 'auto', note: h.note || '', _copyOf: h.id }) }, '复制'),
 					e(Button, { variant: 'outline', onClick: () => setForm({ id: h.id, name: h.name, host: h.host, port: h.port, user: h.user, authType: h.authType, keyPath: h.keyPath || '', shell: h.shell || 'auto', note: h.note || '', _editing: h.id }) }, '编辑'),
 					e(Button, { variant: 'ghost', onClick: () => remove(h.id) }, '删除'),
 					e(Button, { variant: 'outline', onClick: () => { setRunTarget(h.id); setRunOut(null) } }, '选择运行')))
