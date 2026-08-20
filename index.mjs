@@ -193,14 +193,47 @@ export function apply(ctx) {
     }
   }
 
+  function remoteBasename(p) {
+    const trimmed = p.replace(/\/+$/, '')
+    const base = trimmed.slice(trimmed.lastIndexOf('/') + 1)
+    return base || 'download.bin'
+  }
+
+  async function localPathIsDir(p) {
+    if (p === homeDir || p.endsWith('/')) return true
+    try {
+      const info = await fs.stat(await fs.resolve(p))
+      return info.type === 'directory'
+    } catch {
+      return false
+    }
+  }
+
+  async function resolveDownloadLocalPath(localPath, remotePath) {
+    if (typeof localPath !== 'string' || !localPath.trim()) {
+      return { err: '本地路径不能为空（目录如 ~/ 或 /Users/me/Downloads/，或含文件名的完整路径）' }
+    }
+    await ensureHome()
+    const expanded = expandLocalPath(localPath)
+    const isDir = await localPathIsDir(expanded)
+    return { path: isDir ? expanded.replace(/\/$/, '') + '/' + remoteBasename(remotePath) : expanded }
+  }
+
   async function uploadToHost(ref, localPath, remotePath) {
+    let remoteErr = null
     if (typeof remotePath !== 'string' || !remotePath.trim()) {
-      return { ok: false, error: '远端路径不能为空（需包含文件名的绝对路径，如 /tmp/config.conf）' }
+      remoteErr = '远端路径不能为空（需包含文件名的绝对路径，如 /tmp/config.conf）'
     }
     const localErr = checkLocalPath(localPath)
     if (localErr) return { ok: false, error: localErr }
+    if (remoteErr) return { ok: false, error: remoteErr }
     await ensureHome()
     localPath = expandLocalPath(localPath)
+    // 远端路径若以 / 结尾，视为目录，自动拼接本地文件名
+    if (remotePath.endsWith('/')) {
+      const base = localPath.slice(localPath.lastIndexOf('/') + 1)
+      remotePath = remotePath + base
+    }
     const target = await fs.resolve(localPath)
     const bytes = await fs.readBytes(target, undefined, MAX_FILE_BYTES + 1)
     if (bytes.length > MAX_FILE_BYTES) {
@@ -220,13 +253,12 @@ export function apply(ctx) {
   }
 
   async function downloadFromHost(ref, remotePath, localPath) {
-    if (typeof remotePath !== 'string' || !remotePath.trim()) {
-      return { ok: false, error: '远端路径不能为空' }
+    if (typeof remotePath !== 'string' || !remotePath.trim() || remotePath.endsWith('/')) {
+      return { ok: false, error: '远端路径必须是文件完整路径（如 /etc/config.conf），不支持整个目录' }
     }
-    const localErr = checkLocalPath(localPath)
-    if (localErr) return { ok: false, error: localErr }
-    await ensureHome()
-    localPath = expandLocalPath(localPath)
+    const resolved = await resolveDownloadLocalPath(localPath, remotePath)
+    if (resolved.err) return { ok: false, error: resolved.err }
+    localPath = resolved.path
     const dir = localPath.replace(/[^/]*$/, '')
     const res = await runOnHost(ref, (h) => 'set -o pipefail 2>/dev/null; ' + buildSshPrefix(h)
       + ' -- ' + shellQuote('base64 ' + shellQuote(remotePath))
