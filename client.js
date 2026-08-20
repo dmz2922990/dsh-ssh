@@ -93,7 +93,9 @@ window.__ModuleLoader__.load({
 					})
 					const r = form._editing
 						? await apiSend('POST', '/dsh-ssh/api/hosts/' + encodeURIComponent(form._editing), payload)
-						: await apiSend('POST', '/dsh-ssh/api/hosts', payload)
+						: form._copyOf
+							? await apiSend('POST', '/dsh-ssh/api/hosts/' + encodeURIComponent(form._copyOf) + '/copy', payload)
+							: await apiSend('POST', '/dsh-ssh/api/hosts', payload)
 					if (r && r.error) setError(r.error)
 					else { setError(''); setForm(null); await refresh() }
 				} catch (err) { setError(String(err && err.message || err)) }
@@ -146,7 +148,13 @@ window.__ModuleLoader__.load({
 						e('option', { value: 'key' }, 'key'),
 						e('option', { value: 'password' }, 'password'))))
 				formChildren.push(field('私钥路径 (key)', form.keyPath || '', set('keyPath'), { placeholder: '~/.ssh/id_ed25519' }))
-				formChildren.push(field(form._editing ? '密码 (留空保持不变)' : '密码', form.password || '', set('password'), { type: 'password' }))
+				if (form._copyOf) {
+					formChildren.push(e('div', { key: 'pw', className: 'ssh-field' },
+						e('label', null, '密码'),
+						e('div', { className: 'ssh-muted', style: { padding: '6px 0' } }, '继承自源主机')))
+				} else {
+					formChildren.push(field(form._editing ? '密码 (留空保持不变)' : '密码', form.password || '', set('password'), { type: 'password' }))
+				}
 				formChildren.push(e('div', { className: 'ssh-field' },
 					e('label', null, '远端 Shell'),
 					e('select', { className: 'ssh-select', value: form.shell || 'auto', onChange: set('shell') },
@@ -156,7 +164,7 @@ window.__ModuleLoader__.load({
 						e('option', { value: 'sh' }, 'sh'))))
 				formChildren.push(field('备注', form.note || '', set('note')))
 				formChildren.push(e('div', { key: 'actions', className: 'ssh-row', style: { gridColumn: '1 / -1' } },
-					e(Button, { variant: 'primary', disabled: busy || !form.id || !form.host, onClick: submit }, form._editing ? '保存' : '添加'),
+					e(Button, { variant: 'primary', disabled: busy || !form.id || !form.host, onClick: submit }, form._editing ? '保存' : form._copyOf ? '复制' : '添加'),
 					e(Button, { variant: 'outline', onClick: () => setForm(null) }, '取消')))
 				children.push(e('div', { key: 'form', className: 'ssh-form' }, formChildren))
 			}

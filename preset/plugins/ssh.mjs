@@ -196,6 +196,25 @@ export function apply(ctx) {
       await save()
       return publicHost(h)
     },
+    async copy(ref, overrides) {
+      const list = await load()
+      const src = await findHost(ref)
+      if (!src) throw new Error('host not found: ' + ref)
+      const o = overrides || {}
+      if (!o.id) throw new Error('copy requires a new id')
+      if (list.some((h) => h.id === o.id || (o.name && h.name === o.name))) {
+        throw new Error('host id/name already exists: ' + o.id)
+      }
+      const clone = JSON.parse(JSON.stringify(src))
+      clone.id = o.id
+      clone.host = o.host || src.host
+      clone.name = o.name || o.id
+      if (o.port !== undefined) clone.port = o.port
+      if (o.user !== undefined) clone.user = o.user
+      list.push(clone)
+      await save()
+      return publicHost(clone)
+    },
     async remove(id) {
       const list = await load()
       const idx = list.findIndex((x) => x.id === id || (x.name && x.name === id))
@@ -277,6 +296,23 @@ export function apply(ctx) {
       }
       return service.update(args.id, patch)
     },
+  })
+
+  ctx.tools.register({
+    name: 'ssh_host_copy',
+    description: 'Duplicate a managed SSH host under a new id (keeps auth, shell, note; typically only host/IP and name need to change).',
+    parameters: {
+      type: 'object',
+      properties: {
+        from: { type: 'string', description: 'Existing host id/name to copy from' },
+        id: { type: 'string', description: 'New unique host id' },
+        host: { type: 'string', description: 'New hostname/IP' },
+        name: { type: 'string', description: 'New display name (defaults to new id)' },
+      },
+      required: ['from', 'id', 'host'],
+    },
+    output: jsonOut(),
+    execute(args) { return service.copy(args.from, { id: args.id, host: args.host, name: args.name }) },
   })
 
   ctx.tools.register({
