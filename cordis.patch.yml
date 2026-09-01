@@ -1,0 +1,9 @@
+# The dsh-ssh bundle patch: inserts this plugin's rows into the
+# profile's plugin tree. Applied after the in-box bundle layers.
+# - dsh-ssh:      host half (ssh.hosts service + ssh_* tools)
+# - dsh-ssh-web:  webapi half (/dsh-ssh/api backend for the settings page)
+- insert:
+    - id: dsh-ssh
+      name: dsh-ssh
+    - id: dsh-ssh-web
+      name: dsh-ssh/webapi
