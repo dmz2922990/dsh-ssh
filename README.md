@@ -6,7 +6,7 @@ DeepSeek Harness (DSH) 插件：**SSH 主机管理 + 远程 Bash 执行**。
 
 | 形态 | 位置 | 适用 |
 |---|---|---|
-| **Host 插件（`dsh plugin` 安装，推荐）** | [`index.mjs`](index.mjs) / [`webapi.mjs`](webapi.mjs) / [`client.js`](client.js) | 全局挂载，所有 session 的 agent 直接获得工具；web profile 附带 GUI 设置页面 |
+| **Host 插件（`dsh plugin` 安装，推荐）** | [`index.mjs`](index.mjs) / [`client.js`](client.js) | 全局挂载，所有 session 的 agent 直接获得工具；web profile 附带 GUI 设置页面 |
 | Agent 预设 | [`preset/`](preset/) | 每个使用该预设的新 session 自动获得全部 SSH 工具与服务，重启持久 |
 | 动态 Cordis 插件（会话临时） | [`plugin/`](plugin/) | 在任意会话中通过 `cordis_define` 粘贴加载，进程内有效 |
 
@@ -36,7 +36,7 @@ DeepSeek Harness (DSH) 插件：**SSH 主机管理 + 远程 Bash 执行**。
 dsh plugin --profile web add https://github.com/dmz2922990/dsh-ssh.git
 
 # 重启 dsh web，所有 session（任意 preset）的 agent 直接拥有 ssh_bash 等工具，
-# 设置中出现「SSH 主机」管理页面（dsh-ssh-web 行提供 /dsh-ssh/api 后端）
+# 设置中出现「SSH 主机」管理页面（/dsh-ssh/api 后端由同一插件提供）
 ```
 
 插件在 `package.json` 中声明了 `dsh.bundle`，`dsh plugin add` 会自动将其挂载为 profile 的 bundle 层——**无需手动编辑 `cordis.patch.yml`**。

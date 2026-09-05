@@ -3,8 +3,8 @@
 //
 // Hosts persist in ~/.dsh/ssh-hosts.json. Password auth uses SSH_ASKPASS
 // (no pty, no sshpass) so it works inside the harness command sandbox.
-// The browser settings page is served by webapi.mjs (separate entry with a
-// hard `webServer` inject; services are not visible via ctx.get at apply time).
+// The browser settings page is served by the same entry: webServer routes
+// under /dsh-ssh/api/* are registered when webServer is available (web profile).
 
 const STORE_NAME = 'ssh-hosts.json'
 
@@ -19,7 +19,7 @@ function jsonOut() {
   }
 }
 
-export const inject = ['shell', 'fs', 'tools']
+export const inject = ['shell', 'fs', 'tools', 'webServer']
 
 export function apply(ctx) {
   const shell = ctx.shell
@@ -502,6 +502,84 @@ export function apply(ctx) {
     timeoutMs: 610000,
     execute(args) { return downloadFromHost(args.host, args.remotePath, args.localPath) },
   })
+
+  // ── web API (web profile only) ───────────────────────────────────────────
+  const webServer = ctx.webServer
+
+  function readBody(req) {
+    return new Promise((resolve, reject) => {
+      let data = ''
+      req.on('data', (chunk) => { data += chunk })
+      req.on('end', () => {
+        try { resolve(data ? JSON.parse(data) : {}) } catch (e) { reject(e) }
+      })
+      req.on('error', reject)
+    })
+  }
+
+  function send(res, status, value) {
+    res.statusCode = status
+    res.setHeader('content-type', 'application/json; charset=utf-8')
+    res.end(JSON.stringify(value))
+  }
+
+  const api = async (req, res) => {
+    const path = String(req.url || '').split('?')[0]
+    const method = String(req.method || 'GET').toUpperCase()
+    try {
+      if (method === 'GET' && path === '/dsh-ssh/api/hosts') {
+        return send(res, 200, await service.list())
+      }
+      if (method === 'POST' && path === '/dsh-ssh/api/hosts') {
+        const body = await readBody(req)
+        return send(res, 200, await service.add({
+          id: body.id, name: body.name, host: body.host, port: body.port, user: body.user, note: body.note, shell: body.shell,
+          auth: { type: body.authType, keyPath: body.keyPath, password: body.password },
+        }))
+      }
+      if (method === 'POST' && path.startsWith('/dsh-ssh/api/hosts/') && path.endsWith('/copy')) {
+        const id = decodeURIComponent(path.slice('/dsh-ssh/api/hosts/'.length, -'/copy'.length))
+        const body = await readBody(req)
+        return send(res, 200, await service.copy(id, { id: body.id, host: body.host, name: body.name, port: body.port, user: body.user }))
+      }
+      if (method === 'POST' && path.startsWith('/dsh-ssh/api/hosts/')) {
+        const id = decodeURIComponent(path.slice('/dsh-ssh/api/hosts/'.length))
+        const body = await readBody(req)
+        const patch = {}
+        for (const key of ['host', 'name', 'port', 'user', 'note', 'shell']) {
+          if (body[key] !== undefined) patch[key] = body[key]
+        }
+        if (body.authType !== undefined || body.keyPath !== undefined || body.password !== undefined) {
+          patch.auth = { type: body.authType, keyPath: body.keyPath, password: body.password }
+        }
+        return send(res, 200, await service.update(id, patch))
+      }
+      if (method === 'DELETE' && path.startsWith('/dsh-ssh/api/hosts/')) {
+        const id = decodeURIComponent(path.slice('/dsh-ssh/api/hosts/'.length))
+        return send(res, 200, { ok: await service.remove(id) })
+      }
+      if (method === 'POST' && path === '/dsh-ssh/api/bash') {
+        const body = await readBody(req)
+        return send(res, 200, await service.bash(body.host, body.command, body.timeoutMs || 60000, body.shell))
+      }
+      if (method === 'POST' && path === '/dsh-ssh/api/upload') {
+        const body = await readBody(req)
+        return send(res, 200, await service.upload(body.host, body.localPath, body.remotePath))
+      }
+      if (method === 'POST' && path === '/dsh-ssh/api/download') {
+        const body = await readBody(req)
+        return send(res, 200, await service.download(body.host, body.remotePath, body.localPath))
+      }
+      return send(res, 404, { error: 'not found: ' + method + ' ' + path })
+    } catch (e) {
+      return send(res, 400, { error: String(e && e.message || e) })
+    }
+  }
+
+  if (webServer) {
+    ctx.effect(() => webServer.register({ kind: 'prefix', path: '/dsh-ssh/api', handler: api }), 'dsh-ssh web api')
+    ctx.logger?.info?.('dsh-ssh: web api mounted at /dsh-ssh/api/*')
+  }
 
   ctx.logger?.info?.('dsh-ssh: ssh.hosts service and ssh_* tools registered')
 }

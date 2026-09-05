@@ -1,21 +1,19 @@
 {
   "name": "dsh-ssh",
-  "version": "1.5.0",
+  "version": "2.0.0",
   "description": "DSH plugin: managed SSH hosts + remote bash execution (ssh_bash tools and ssh.hosts service)",
   "type": "module",
   "main": "index.mjs",
   "exports": {
     ".": "./index.mjs",
     "./client": "./client.js",
-    "./package.json": "./package.json",
-    "./webapi": "./webapi.mjs"
+    "./package.json": "./package.json"
   },
   "files": [
     "index.mjs",
     "client.js",
     "cordis.patch.yml",
-    "preset",
-    "webapi.mjs"
+    "preset"
   ],
   "license": "MIT",
   "dsh": {
