@@ -1,10 +1,9 @@
-// dsh-ssh host half: SSH host inventory + remote bash tools + web API for the
-// settings page. Pure Node, no external dependencies.
-//
-// Hosts persist in ~/.dsh/ssh-hosts.json. Password auth uses SSH_ASKPASS
-// (no pty, no sshpass) so it works inside the harness command sandbox.
-// The browser settings page is served by the same entry: webServer routes
-// under /dsh-ssh/api/* are registered when webServer is available (web profile).
+// SSH inventory and tools, with authenticated Connection RPC for Web and Desktop.
+
+import { homedir } from 'node:os'
+import { resolve, join } from 'node:path'
+import { mkdir, readFile, writeFile, rename, unlink, chmod } from 'node:fs/promises'
+import { randomUUID } from 'node:crypto'
 
 const STORE_NAME = 'ssh-hosts.json'
 
@@ -19,59 +18,76 @@ function jsonOut() {
   }
 }
 
-export const inject = ['shell', 'fs', 'tools', 'webServer']
+export const inject = ['shell', 'fs', 'tools']
 
 export function apply(ctx) {
   const shell = ctx.shell
   const fs = ctx.fs
 
-  let homeDir
-  let storePath
+  const homeDir = homedir()
+  const dataDir = resolve(process.env.DSH_HOME || join(homeDir, '.dsh'))
+  const storePath = join(dataDir, STORE_NAME)
   let hosts = null
+  let loading
+  let mutations = Promise.resolve()
 
-  async function ensureHome() {
-    if (homeDir !== undefined) return homeDir
-    const spec = shell.resolve({ command: 'echo $HOME', timeoutMs: 5000 })
-    const result = await shell.run(spec)
-    homeDir = ((result.stdout && result.stdout.text) || '').trim() || '/tmp'
-    storePath = homeDir + '/.dsh/' + STORE_NAME
-    return homeDir
+  const lifetime = new AbortController()
+  ctx.effect(() => () => lifetime.abort(), 'dsh-ssh running commands')
+
+  async function runShell(request) {
+    request = { ...request, signal: request.signal
+      ? AbortSignal.any([lifetime.signal, request.signal]) : lifetime.signal }
+    return (await shell.execute(shell.resolve(request))).result()
   }
 
   async function ensureAskpass() {
-    await ensureHome()
-    const path = homeDir + '/.dsh/.ssh-askpass.sh'
-    const setup = 'test -x ' + shellQuote(path) + ' || { mkdir -p ' + shellQuote(homeDir + '/.dsh')
-      + '; echo ' + shellQuote('#!/bin/sh')
-      + ' > ' + shellQuote(path) + '; echo ' + shellQuote('printf \'%s\\n\' "$SSHPASS_ENV"')
-      + ' >> ' + shellQuote(path) + '; chmod 700 ' + shellQuote(path) + '; }'
-    await shell.run(shell.resolve({ command: setup, timeoutMs: 5000 }))
+    await mkdir(dataDir, { recursive: true, mode: 0o700 })
+    const path = join(dataDir, '.ssh-askpass.sh')
+    await writeFile(path, '#!/bin/sh\nprintf \'%s\\n\' "$SSHPASS_ENV"\n', { mode: 0o700 })
+    await chmod(path, 0o700)
     return path
   }
 
   async function load() {
     if (hosts !== null) return hosts
-    await ensureHome()
-    hosts = []
-    try {
-      const target = await fs.resolve(storePath)
-      const text = await fs.readText(target)
-      const parsed = JSON.parse(text)
-      if (Array.isArray(parsed.hosts)) hosts = parsed.hosts.filter((h) => h && typeof h.id === 'string')
-    } catch {
-      hosts = []
+    if (!loading) loading = (async () => {
+      try {
+        const parsed = JSON.parse(await readFile(storePath, 'utf8'))
+        if (parsed.version !== 1 || !Array.isArray(parsed.hosts)
+          || parsed.hosts.some((h) => !h || typeof h.id !== 'string' || typeof h.host !== 'string')) {
+          throw new Error('invalid SSH host configuration')
+        }
+        parsed.hosts.forEach((h) => validateHost({ ...h, user: h.user || 'root', port: h.port || 22 }))
+        hosts = parsed.hosts.map((h) => ({ ...h, user: h.user || 'root', port: h.port || 22 }))
+      } catch (error) {
+        if (error.code !== 'ENOENT') throw error
+        hosts = []
+      }
+      return hosts
+    })().finally(() => { loading = undefined })
+    return loading
+  }
+
+  function validateHost(h) {
+    for (const key of ['id', 'host', 'user']) {
+      if (typeof h[key] !== 'string' || !h[key].trim() || h[key].startsWith('-') || /[\r\n\0]/.test(h[key])) {
+        throw new Error('invalid SSH ' + key)
+      }
     }
-    return hosts
+    if (!Number.isInteger(h.port) || h.port < 1 || h.port > 65535) throw new Error('invalid SSH port')
+    if (h.auth && !['agent', 'key', 'password'].includes(h.auth.type)) throw new Error('invalid SSH auth type')
   }
 
   async function save() {
-    await ensureHome()
-    await shell.run(shell.resolve({
-      command: 'mkdir -p ' + shellQuote(homeDir + '/.dsh'),
-      timeoutMs: 5000,
-    }))
-    const target = await fs.resolve(storePath)
-    await fs.writeText(target, JSON.stringify({ version: 1, hosts }, null, 2))
+    hosts.forEach(validateHost)
+    await mkdir(dataDir, { recursive: true, mode: 0o700 })
+    const temporary = storePath + '.' + randomUUID() + '.tmp'
+    try {
+      await writeFile(temporary, JSON.stringify({ version: 1, hosts }, null, 2), { mode: 0o600, flag: 'wx' })
+      await rename(temporary, storePath)
+    } finally {
+      await unlink(temporary).catch((error) => { if (error.code !== 'ENOENT') throw error })
+    }
   }
 
   function publicHost(h) {
@@ -92,27 +108,34 @@ export function apply(ctx) {
 
   function normalizeAuth(auth) {
     if (!auth) return { type: 'agent' }
-    const type = auth.type === 'password' || auth.type === 'key' ? auth.type : 'agent'
+    const type = auth.type === undefined ? 'agent' : auth.type
+    if (!['agent', 'key', 'password'].includes(type)) throw new Error('invalid SSH auth type')
     return { type, keyPath: auth.keyPath, password: auth.password }
   }
 
   function buildSshPrefix(h) {
     const auth = normalizeAuth(h.auth)
     const parts = []
-    if (auth.type === 'password' && auth.password) {
-      parts.push('SSHPASS_ENV=' + shellQuote(auth.password))
-      parts.push('SSH_ASKPASS="' + homeDir + '/.dsh/.ssh-askpass.sh"')
-      parts.push('SSH_ASKPASS_REQUIRE=force')
-      parts.push('DISPLAY=:')
-    }
     parts.push('ssh')
     parts.push('-o StrictHostKeyChecking=accept-new')
     parts.push('-o ConnectTimeout=15')
+    // Global multiplexing sockets can fall outside the executor's writable paths.
+    parts.push('-o ControlMaster=no -o ControlPath=none -o ControlPersist=no')
     if (auth.type !== 'password') parts.push('-o BatchMode=yes')
     if (auth.keyPath) parts.push('-i ' + shellQuote(auth.keyPath))
     parts.push('-p ' + String(h.port || 22))
     parts.push(shellQuote((h.user || 'root') + '@' + h.host))
     return parts.join(' ')
+  }
+
+  function sshEnvironment(h) {
+    const auth = normalizeAuth(h.auth)
+    return auth.type === 'password' && auth.password ? {
+      SSHPASS_ENV: auth.password,
+      SSH_ASKPASS: join(dataDir, '.ssh-askpass.sh'),
+      SSH_ASKPASS_REQUIRE: 'force',
+      DISPLAY: ':',
+    } : undefined
   }
 
   function buildSshCommand(h) {
@@ -140,17 +163,19 @@ export function apply(ctx) {
     const runHost = shellOverride !== undefined ? Object.assign({}, h, { shell: shellOverride }) : h
     const request = {
       command: buildSshCommand(runHost),
+      env: sshEnvironment(h),
       stdin: String(command),
       timeoutMs: Math.min(Math.max(Number(timeoutMs) || 120000, 1000), 600000),
       stdoutMaxBytes: 200000,
       ...(signal ? { signal } : {}),
     }
-    const result = await shell.run(shell.resolve(request))
+    const result = await runShell(request)
     return {
-      ok: result.exitCode === 0 && !result.timedOut,
+      ok: result.exitCode === 0 && !result.timedOut && !result.aborted,
       host: h.id,
       exitCode: result.exitCode,
       timedOut: result.timedOut,
+      aborted: !!result.aborted,
       stdout: (result.stdout && result.stdout.text) || '',
       stdoutTruncated: !!(result.stdout && result.stdout.truncated),
       stderr: (result.stderr && result.stderr.text) || '',
@@ -179,17 +204,19 @@ export function apply(ctx) {
       return { ok: false, error: 'host not found: ' + ref, knownHosts: (await load()).map(publicHost) }
     }
     if (h.auth && h.auth.type === 'password' && h.auth.password) await ensureAskpass()
-    const result = await shell.run(shell.resolve({
+    const result = await runShell({
       command: command(h),
+      env: sshEnvironment(h),
       ...(stdin !== undefined ? { stdin } : {}),
       timeoutMs: TRANSFER_TIMEOUT_MS,
       stdoutMaxBytes: stdoutMaxBytes === undefined ? 2000 : stdoutMaxBytes,
-    }))
+    })
     return {
       host: h.id,
-      ok: result.exitCode === 0 && !result.timedOut,
+      ok: result.exitCode === 0 && !result.timedOut && !result.aborted,
       exitCode: result.exitCode,
       timedOut: result.timedOut,
+      aborted: !!result.aborted,
       stderr: (result.stderr && result.stderr.text) || '',
     }
   }
@@ -214,7 +241,6 @@ export function apply(ctx) {
     if (typeof localPath !== 'string' || !localPath.trim()) {
       return { err: '本地路径不能为空（目录如 ~/ 或 /Users/me/Downloads/，或含文件名的完整路径）' }
     }
-    await ensureHome()
     const expanded = expandLocalPath(localPath)
     const isDir = await localPathIsDir(expanded)
     return { path: isDir ? expanded.replace(/\/$/, '') + '/' + remoteBasename(remotePath) : expanded }
@@ -228,9 +254,8 @@ export function apply(ctx) {
     const localErr = checkLocalPath(localPath)
     if (localErr) return { ok: false, error: localErr }
     if (remoteErr) return { ok: false, error: remoteErr }
-    await ensureHome()
     localPath = expandLocalPath(localPath)
-    // 远端路径若以 / 结尾，视为目录，自动拼接本地文件名
+    // A trailing slash denotes a directory; append the local basename.
     if (remotePath.endsWith('/')) {
       const base = localPath.slice(localPath.lastIndexOf('/') + 1)
       remotePath = remotePath + base
@@ -249,7 +274,7 @@ export function apply(ctx) {
       direction: 'upload',
       localPath,
       remotePath,
-      bytes: res.ok ? bytes.length : undefined,
+      bytes: res.ok ? bytes.length : null,
     })
   }
 
@@ -288,7 +313,7 @@ export function apply(ctx) {
         id: input.id,
         name: input.name || input.id,
         host: input.host,
-        port: input.port || 22,
+        port: input.port ?? 22,
         user: input.user || 'root',
         shell: input.shell,
         auth: normalizeAuth(input.auth),
@@ -308,7 +333,9 @@ export function apply(ctx) {
       }
       if (patch.tags !== undefined) h.tags = Array.isArray(patch.tags) ? patch.tags : []
       if (patch.auth !== undefined) {
-        const next = normalizeAuth(patch.auth)
+        const next = normalizeAuth({ ...h.auth, ...Object.fromEntries(
+          Object.entries(patch.auth).filter(([, value]) => value !== undefined),
+        ) })
         if (next.keyPath === undefined && h.auth) next.keyPath = h.auth.keyPath
         if (next.password === undefined && h.auth) next.password = h.auth.password
         h.auth = next
@@ -346,6 +373,21 @@ export function apply(ctx) {
     async bash(ref, command, timeoutMs, shell) { return bashOnHost(ref, command, timeoutMs, undefined, shell) },
     async upload(ref, localPath, remotePath) { return uploadToHost(ref, localPath, remotePath) },
     async download(ref, remotePath, localPath) { return downloadFromHost(ref, remotePath, localPath) },
+  }
+
+  for (const name of ['add', 'update', 'copy', 'remove']) {
+    const operation = service[name]
+    service[name] = (...args) => {
+      const pending = mutations.then(async () => {
+        const snapshot = structuredClone(await load())
+        try { return await operation(...args) } catch (error) {
+          hosts = snapshot
+          throw error
+        }
+      })
+      mutations = pending.catch(() => {})
+      return pending
+    }
   }
 
   ctx.provide('ssh.hosts', service)
@@ -503,82 +545,59 @@ export function apply(ctx) {
     execute(args) { return downloadFromHost(args.host, args.remotePath, args.localPath) },
   })
 
-  // ── web API (web profile only) ───────────────────────────────────────────
-  const webServer = ctx.webServer
-
-  function readBody(req) {
-    return new Promise((resolve, reject) => {
-      let data = ''
-      req.on('data', (chunk) => { data += chunk })
-      req.on('end', () => {
-        try { resolve(data ? JSON.parse(data) : {}) } catch (e) { reject(e) }
-      })
-      req.on('error', reject)
+  // Connection owns authentication and ties the route to this plugin's lifetime.
+  ctx.inject(['connection'], (webCtx) => {
+    webCtx.connection.fetch.register({
+      path: '/api/dsh-ssh/request',
+      methods: ['POST'],
+      requestBody: 'buffered',
+      async fetch(request) {
+        let message
+        try { message = await request.json() } catch {
+          return new Response('invalid JSON', { status: 400 })
+        }
+        if (!message || message.type !== 'client-request' || typeof message.rpcId !== 'string'
+          || message.method !== 'dsh-ssh/request' || !message.payload || typeof message.payload !== 'object') {
+          return new Response('invalid SSH request envelope', { status: 400 })
+        }
+        const result = await dispatch(message.payload, request.signal)
+        return Response.json({ type: 'server-response', rpcId: message.rpcId, result })
+      },
     })
-  }
+  })
 
-  function send(res, status, value) {
-    res.statusCode = status
-    res.setHeader('content-type', 'application/json; charset=utf-8')
-    res.end(JSON.stringify(value))
-  }
-
-  const api = async (req, res) => {
-    const path = String(req.url || '').split('?')[0]
-    const method = String(req.method || 'GET').toUpperCase()
+  async function dispatch(payload, signal) {
     try {
-      if (method === 'GET' && path === '/dsh-ssh/api/hosts') {
-        return send(res, 200, await service.list())
-      }
-      if (method === 'POST' && path === '/dsh-ssh/api/hosts') {
-        const body = await readBody(req)
-        return send(res, 200, await service.add({
-          id: body.id, name: body.name, host: body.host, port: body.port, user: body.user, note: body.note, shell: body.shell,
-          auth: { type: body.authType, keyPath: body.keyPath, password: body.password },
-        }))
-      }
-      if (method === 'POST' && path.startsWith('/dsh-ssh/api/hosts/') && path.endsWith('/copy')) {
-        const id = decodeURIComponent(path.slice('/dsh-ssh/api/hosts/'.length, -'/copy'.length))
-        const body = await readBody(req)
-        return send(res, 200, await service.copy(id, { id: body.id, host: body.host, name: body.name, port: body.port, user: body.user }))
-      }
-      if (method === 'POST' && path.startsWith('/dsh-ssh/api/hosts/')) {
-        const id = decodeURIComponent(path.slice('/dsh-ssh/api/hosts/'.length))
-        const body = await readBody(req)
+      const { method, path, body = {} } = payload
+      let value
+      if (path === '/hosts' && method === 'GET') value = await service.list()
+      else if (path === '/hosts' && method === 'POST') value = await service.add({
+        ...body, auth: { type: body.authType, keyPath: body.keyPath, password: body.password },
+      })
+      else if (path.startsWith('/hosts/') && path.endsWith('/copy') && method === 'POST') {
+        value = await service.copy(decodeURIComponent(path.slice(7, -5)), body)
+      } else if (path.startsWith('/hosts/') && method === 'POST') {
         const patch = {}
-        for (const key of ['host', 'name', 'port', 'user', 'note', 'shell']) {
+        for (const key of ['host', 'name', 'port', 'user', 'note', 'shell', 'tags']) {
           if (body[key] !== undefined) patch[key] = body[key]
         }
         if (body.authType !== undefined || body.keyPath !== undefined || body.password !== undefined) {
           patch.auth = { type: body.authType, keyPath: body.keyPath, password: body.password }
         }
-        return send(res, 200, await service.update(id, patch))
-      }
-      if (method === 'DELETE' && path.startsWith('/dsh-ssh/api/hosts/')) {
-        const id = decodeURIComponent(path.slice('/dsh-ssh/api/hosts/'.length))
-        return send(res, 200, { ok: await service.remove(id) })
-      }
-      if (method === 'POST' && path === '/dsh-ssh/api/bash') {
-        const body = await readBody(req)
-        return send(res, 200, await service.bash(body.host, body.command, body.timeoutMs || 60000, body.shell))
-      }
-      if (method === 'POST' && path === '/dsh-ssh/api/upload') {
-        const body = await readBody(req)
-        return send(res, 200, await service.upload(body.host, body.localPath, body.remotePath))
-      }
-      if (method === 'POST' && path === '/dsh-ssh/api/download') {
-        const body = await readBody(req)
-        return send(res, 200, await service.download(body.host, body.remotePath, body.localPath))
-      }
-      return send(res, 404, { error: 'not found: ' + method + ' ' + path })
-    } catch (e) {
-      return send(res, 400, { error: String(e && e.message || e) })
+        value = await service.update(decodeURIComponent(path.slice(7)), patch)
+      } else if (path.startsWith('/hosts/') && method === 'DELETE') {
+        value = { ok: await service.remove(decodeURIComponent(path.slice(7))) }
+      } else if (path === '/bash' && method === 'POST') {
+        value = await bashOnHost(body.host, body.command, body.timeoutMs || 60000, signal, body.shell)
+      } else if (path === '/upload' && method === 'POST') {
+        value = await service.upload(body.host, body.localPath, body.remotePath)
+      } else if (path === '/download' && method === 'POST') {
+        value = await service.download(body.host, body.remotePath, body.localPath)
+      } else throw new Error('unknown SSH request')
+      return { ok: true, value }
+    } catch (error) {
+      return { ok: false, error: { code: 'ssh/request', message: String(error.message || error) } }
     }
-  }
-
-  if (webServer) {
-    ctx.effect(() => webServer.register({ kind: 'prefix', path: '/dsh-ssh/api', handler: api }), 'dsh-ssh web api')
-    ctx.logger?.info?.('dsh-ssh: web api mounted at /dsh-ssh/api/*')
   }
 
   ctx.logger?.info?.('dsh-ssh: ssh.hosts service and ssh_* tools registered')

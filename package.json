@@ -1,6 +1,6 @@
 {
   "name": "dsh-ssh",
-  "version": "2.1.0",
+  "version": "2.2.2",
   "description": "DSH plugin: managed SSH hosts + remote bash execution (ssh_bash tools and ssh.hosts service)",
   "type": "module",
   "main": "index.mjs",
@@ -12,20 +12,27 @@
   "files": [
     "index.mjs",
     "client.js",
-    "cordis.patch.yml",
-    "preset"
+    "cordis.patch.yml"
   ],
   "license": "MIT",
   "dsh": {
     "client": {
       "inject": [
-        "@deepseek-ai/dsh-client-ui-slots",
-        "@deepseek-ai/dsh-client-runtime"
+        "@deepseek-ai/dsh-client-ui-settings",
+        "@deepseek-ai/dsh-client-connection"
       ],
       "platform": "web"
     },
     "bundle": {
       "patch": "./cordis.patch.yml"
-    }
+    },
+    "manifestVersion": 1
+  },
+  "engines": {
+    "node": ">=22",
+    "dsh": ">=0.2.2-rc.1 <0.3.0"
+  },
+  "scripts": {
+    "test": "node --test tests/*.test.mjs"
   }
 }

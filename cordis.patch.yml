@@ -1,7 +1,6 @@
-# The dsh-ssh bundle patch: inserts this plugin's row into the
-# profile's plugin tree. Applied after the in-box bundle layers.
-# Single entry — host half (ssh.hosts service + ssh_* tools) + web API
-# (/dsh-ssh/api/* for the settings page) in one file.
+# Mount one host instance per profile for the SSH service and model tools.
+# The browser settings page uses the authenticated Connection RPC when available.
+# Do not add a second manual row or a legacy preset instance.
 - insert:
     - id: dsh-ssh
       name: dsh-ssh
