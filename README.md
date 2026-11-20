@@ -1,121 +1,191 @@
 # dsh-ssh
 
-DeepSeek Harness (DSH) 插件：**SSH 主机管理 + 远程 Bash 执行**。
+为 **DeepSeek Harness** 提供 SSH 主机管理、远程命令执行与文件传输。
 
-当前版本面向 **DeepSeek Harness 桌面版 0.2.2-rc.1**，使用一个 Host bundle 注册服务、工具和设置页面。安装到对应 profile 后，所有 session（任意 preset）的 Agent 均可使用 SSH 工具。设置页面默认展示主机列表，新增和编辑按连接信息、身份认证、更多选项分组；执行命令与文件传输位于「连接工具」。桌面与 Web 提供「SSH 主机」设置页面；不提供浏览器界面的 profile 仅注册服务和工具。
+在设置中保存一次连接信息，即可让任意 Agent 会话使用 SSH 工具；也可以直接在界面中测试连接、上传和下载文件。
 
-## 截图
+![SSH 主机管理：主机列表、认证方式与连接操作](docs/screenshot/screenshot.png)
 
-### SSH 主机设置页面
-
-![设置页面](docs/screenshot/screenshot.png)
-
-### Agent 使用 ssh_bash
-
-![Agent 使用 ssh_bash](docs/screenshot/agent_using_ssh.png)
+[安装](#安装) · [开始使用](#开始使用) · [工具一览](#工具一览) · [更新与卸载](#更新与卸载) · [常见问题](#常见问题) · [开发说明](#开发说明)
 
 ## 功能
 
-- **主机管理（增删改查、复制）**：持久化到 `$DSH_HOME/ssh-hosts.json`，未设置 `DSH_HOME` 时为 `~/.dsh/ssh-hosts.json`。
-- **模型工具**：`ssh_host_list` / `ssh_host_add` / `ssh_host_update` / `ssh_host_remove` / `ssh_host_copy` / `ssh_bash` / `ssh_upload` / `ssh_download`。
-- **Cordis 服务 `ssh.hosts`**：供其他声明依赖该服务的插件调用。
-- **三种认证**：`agent`（BatchMode 免交互）/ `key`（私钥）/ `password`（`SSH_ASKPASS`，无需 sshpass、不申请 pty）。
-- **文件传输**：上传、下载上限 128MB，使用 base64 over ssh，无需 scp，支持 BusyBox 设备，自动创建父目录。
-- **自适应远端 Shell**：默认优先 bash，无则回落 sh/ash；可按主机或单次调用指定。
+| 能力 | 说明 |
+| --- | --- |
+| 主机管理 | 添加、编辑、复制和删除主机，统一保存连接信息 |
+| 多种认证 | 支持 SSH Agent、私钥和密码认证 |
+| 远程执行 | 支持多行脚本；自动选择 bash，无 bash 时回落到 sh/ash |
+| 文件传输 | 上传本地文件、下载远端文件，自动创建父目录；上传最大 128 MB |
+| 图形界面 | 主机管理与连接工具分开，认证字段按所选方式显示 |
+| Agent 工具 | 安装到对应 profile 后，各会话可使用全部 8 个 SSH 工具 |
 
-## 安装到桌面版
+## 安装
 
-桌面版 **0.2.2-rc.1 的 desktop profile 由 Electron 应用独占管理**，不能使用 `dsh plugin --profile desktop`，即使 CLI 版本一致也会被拒绝。请保持桌面应用打开，通过应用内插件管理器安装。
+当前插件版本为 **2.2.2**，已在 **DeepSeek Harness 桌面版 0.2.2-rc.1** 验证。运行环境需要本机 SSH 客户端；Node.js 要求为 22 或更新版本。
 
-1. 打开桌面应用的「插件」页面。
-2. 点击「添加插件」→「安装第三方插件」。
-3. 在「包名或地址」中填写本机仓库的绝对目录路径，例如：
+### 桌面版（推荐）
+
+通过桌面应用内的插件管理器安装：
+
+1. 打开「插件」→「添加插件」→「安装第三方插件」。
+2. 在「包名或地址」填写仓库地址：
 
    ```text
-   /Users/Daniel.Duan/Work/DSH/dsh-ssh
+   https://github.com/dmz2922990/dsh-ssh.git
    ```
 
-4. 按界面完成安装；如提示重启，重启桌面应用。随后在设置中打开「SSH 主机」。
+3. 完成安装后，完全退出并重新打开应用。
+4. 打开「设置」→「SSH 主机」。
 
-安装器支持本地目录、npm 包和 Git 仓库地址。当前本地修复尚未发布到远端时，请使用本地目录。插件声明了 `dsh.bundle`，安装器会自动管理 bundle 层，无需手动编辑 desktop profile 的 `package.json` 或 `cordis.patch.yml`。
+本地开发时，也可以填写已克隆仓库的**绝对目录路径**。
 
-本地目录通常以 `link:` 安装。修改本仓库后，页面代码可能自动刷新，但后台 `index.mjs` 不会自动重载。**每次修改后端后都应完全退出桌面应用（macOS 使用 ⌘Q），再重新打开**，不要只关闭设置或刷新页面。在「插件 → dsh-ssh」详情中确认已加载版本；若新版页面出现 HTTP 404/405，先检查后台是否仍为旧版本，无需反复卸载。
+> 桌面版的 `desktop` profile 由应用管理，不能通过 `dsh plugin --profile desktop` 安装。插件会自动注册，无需手动编辑 profile 配置。
 
-## 安装到 Web 版
-
-Web profile 可以使用 CLI：
+### Web 版
 
 ```bash
-npx @deepseek-ai/dsh@0.2.2-rc.1 plugin --profile web add /absolute/path/to/dsh-ssh
+npx @deepseek-ai/dsh@0.2.2-rc.1 plugin --profile web add https://github.com/dmz2922990/dsh-ssh.git
 ```
 
-安装后重启 Web 进程。不要将同一插件安装、手动挂载或动态加载多份，也不要让多个进程同时修改同一份主机配置。
+安装后重启 Web 进程。本地开发时可将仓库地址替换为本机仓库的绝对路径。
+
+## 开始使用
+
+### 1. 添加主机
+
+在「主机管理」中点击「添加主机」，填写主机标识、地址、用户名和端口，再选择认证方式。
+
+| 认证方式 | 需要填写的内容 |
+| --- | --- |
+| SSH Agent | 使用本机 Agent 或默认 SSH 配置中的身份 |
+| 私钥 | 本地私钥文件路径，例如 `~/.ssh/id_ed25519` |
+| 密码 | 登录密码；编辑已有主机时，留空保留原密码 |
+
+主机标识供 Agent 引用，创建后不可修改；显示名称可以随时调整。远端 Shell 和备注位于「更多选项」。复制主机会继承源主机的认证信息。
+
+### 2. 测试连接或传输文件
+
+点击主机卡片上的「连接工具」，选择需要的操作：
+
+- **执行命令**：例如 `hostname && uptime`，查看输出与退出码。
+- **传输文件**：选择上传或下载，填写本地和远端路径。
+
+### 3. 让 Agent 使用主机
+
+在会话中直接描述目标和操作，例如：
+
+```text
+列出已配置的 SSH 主机。
+在 build-server 上执行 hostname 和 uptime。
+将本地 /tmp/config.conf 上传到 build-server 的 /tmp/config.conf。
+```
+
+Agent 会调用插件工具；使用主机标识可避免名称或地址产生歧义。
+
+<details>
+<summary>查看 Agent 调用示例截图</summary>
+
+![Agent 调用 ssh_bash 执行远程命令](docs/screenshot/agent_using_ssh.png)
+
+</details>
+
+## 工具一览
+
+| 工具 | 用途 |
+| --- | --- |
+| `ssh_host_list` | 列出主机，不返回密码明文 |
+| `ssh_host_add` | 添加主机 |
+| `ssh_host_update` | 更新指定字段，省略的认证字段保持不变 |
+| `ssh_host_copy` | 复制主机及认证信息 |
+| `ssh_host_remove` | 删除主机 |
+| `ssh_bash` | 执行远程脚本，支持超时和远端 Shell 选择 |
+| `ssh_upload` | 上传本地文件 |
+| `ssh_download` | 下载远端文件 |
+
+## 配置与数据
+
+| 文件 | 默认位置 | 用途 |
+| --- | --- | --- |
+| 主机配置 | `~/.dsh/ssh-hosts.json` | 保存主机与认证信息，写入权限为 `0600` |
+| 密码辅助脚本 | `~/.dsh/.ssh-askpass.sh` | 为 SSH 提供密码，权限为 `0700` |
+
+设置 `DSH_HOME` 后，这些文件位于对应数据目录。配置采用原子替换写入；损坏或不可读的文件会报错，不会被当成空配置覆盖。
+
+**密码以明文保存在本机配置文件中，建议优先使用私钥。** 主机列表和管理工具返回值仅包含 `hasPassword`，不返回密码。不要让多个进程同时修改同一份主机配置，也不要同时挂载多份插件。
 
 ## 更新与卸载
 
-**桌面版**：在应用内「插件」页面管理 `dsh-ssh`。有「更新」操作时通过该操作更新；切换安装来源（例如从 Git 改为本地目录）时，先卸载，再通过「添加插件」安装本地目录。卸载使用插件条目的「卸载」操作，并按界面提示重启。
+**桌面版**：在应用内「插件」页面管理 `dsh-ssh`，使用可用的更新或卸载操作。切换安装来源时，先卸载，再从新来源安装。
 
-**Web 版**：可通过对应 profile 的 CLI 操作：
+**Web 版**：
 
 ```bash
+# 更新
 npx @deepseek-ai/dsh@0.2.2-rc.1 plugin --profile web update dsh-ssh
+
+# 卸载
 npx @deepseek-ai/dsh@0.2.2-rc.1 plugin --profile web remove dsh-ssh
 ```
 
-卸载或禁用插件会释放工具、RPC 处理程序、设置页面和样式，并取消该实例正在运行的命令。**主机配置和认证信息会保留**，重新安装可继续使用。需要清除数据时，先自行备份，再单独删除数据目录中的 `ssh-hosts.json` 和 `.ssh-askpass.sh`；不要删除整个 DSH 数据目录。
+**更新后请完全退出并重新打开应用。** 本地目录通常以 `link:` 安装：页面代码可能自动刷新，但后端不会自动重载；仅关闭设置、关闭窗口或刷新页面不一定生效。macOS 可使用 ⌘Q 退出，并在重开后核对插件详情中的版本。
 
-若曾手动将 `dsh-ssh` 插件行添加到 profile 覆盖配置，卸载时也需移除该手动配置，以免留下无法解析的插件行。
+卸载保留主机配置和认证信息，重新安装可以继续使用。运行中的工具、路由和页面会随插件释放，命令会收到取消信号。需要清除数据时，先备份，再单独删除上述两个文件，不要删除整个 DSH 数据目录。手动添加过插件挂载行的用户，还需移除对应配置。
 
-## 从旧预设或动态插件迁移
+## 常见问题
 
-新版 Harness 使用声明式 Agent preset，不再通过 `~/.dsh/.agent-presets/ssh` 自动发现本插件。当前发布只保留 Host bundle，不再提供旧 `preset/`、动态 `plugin/` 或独立 `webapi.mjs` 入口。
+### 页面报 HTTP 404 / 405
 
-1. 备份原 `~/.dsh/ssh-hosts.json`；使用自定义数据目录时，将文件放到对应 `$DSH_HOME` 下。
-2. 卸载会话中原来的动态 SSH 插件，移除手动挂载的旧 SSH preset/plugin 行，停止使用旧「SSH Agent」预设；确认无引用后再清理旧预设目录。
-3. 按上述步骤安装 Host bundle，重新启动应用，以当前内置预设创建会话。
+先核对「插件 → dsh-ssh」中的运行版本，并完全退出应用再打开。本地链接安装可能出现“页面已更新、后端仍运行旧代码”的情况，无需反复卸载。
 
-不要同时运行新旧入口：它们会注册同名工具，并可能用各自缓存覆盖同一份配置。
+### 出现 `unix_listener: cannot bind ... Operation not permitted`
 
-## 配置与通信
+旧版本可能继承本机 SSH 连接复用配置，在受限目录创建控制套接字时失败。2.2.2 已统一为执行、上传和下载关闭连接复用。请更新并完全重启，无需修改 `~/.ssh/config` 或扩大目录权限。
 
-主机配置采用原子替换写入，新文件权限为 `0600`。配置文件损坏、格式不合法或不可读时会显示错误，不会把它当成空配置后覆盖。插件实例内的修改按顺序保存；不支持多个进程同时编辑同一文件。
+### 出现后量子密钥交换警告
 
-设置页面通过 Harness Connection RPC `/api/dsh-ssh/request` 与后端通信，复用 Harness 的连接与认证。旧 `/dsh-ssh/api/*` HTTP 接口不再提供。桌面版内置的浏览器界面也使用这套 RPC；无浏览器服务时仍可使用模型工具。
+该警告说明当前连接未使用后量子密钥交换。是否执行成功应结合退出码、超时和中止状态判断；插件保留警告及默认算法协商。服务器侧可升级支持相应算法的 SSH 实现，参见 [OpenSSH 官方说明](https://www.openssh.org/pq.html)。
 
-## 远程执行原理
+### 从旧预设或动态插件迁移
 
-```bash
-ssh -o StrictHostKeyChecking=accept-new -o ConnectTimeout=15 -o ControlMaster=no -o ControlPath=none -o ControlPersist=no [-i key] [-p port] user@host -- bash -s
-```
+当前仅维护 Host bundle，旧 `preset/`、动态 `plugin/` 和独立 `webapi.mjs` 入口已移除。
 
-脚本通过 stdin 传给远端 shell。密码认证使用 `SSH_ASKPASS` 和 `SSH_ASKPASS_REQUIRE=force`；辅助脚本位于数据目录的 `.ssh-askpass.sh`，权限为 `0700`，仅读取进程环境中的密码。
+1. 备份原主机配置；自定义 `DSH_HOME` 时，将其放入对应数据目录。
+2. 移除旧动态插件和手动挂载行，停止使用旧「SSH Agent」预设。
+3. 安装当前插件，重启后使用内置预设创建会话。
 
-插件的执行、上传、下载均使用独立连接，显式关闭 `ControlMaster`、`ControlPath` 和 `ControlPersist`，避免继承本机连接复用配置后尝试在 `~/.ssh` 创建控制套接字而被执行环境拒绝。其余 SSH 配置仍可正常生效，无需修改用户 SSH 配置或扩大目录权限。
+## 开发说明
 
-如果输出包含 `connection is not using a post-quantum key exchange algorithm`，这是当前连接未使用后量子密钥交换的安全警告，不能仅凭该警告判断命令失败；实际结果由退出码、超时或中止状态决定。插件保留警告和默认算法协商，服务器侧可通过升级 SSH 实现改善协商。[OpenSSH 官方说明](https://www.openssh.org/pq.html)。
+### 服务 API
 
-## `ssh.hosts` 服务 API
-
-调用方应声明对 `ssh.hosts` 的依赖，再读取服务：
+其他插件可声明依赖 `ssh.hosts`，再调用服务：
 
 ```js
 const ssh = ctx.get('ssh.hosts')
-await ssh.list()                              // Redacts passwords.
-await ssh.get(ref)                            // ref: id | name | user@host | host
+await ssh.list()
+await ssh.get(ref)
 await ssh.add({ id, host, port, user, name, note, shell, auth: { type, keyPath, password }, tags })
-await ssh.update(id, patch)                   // Omit auth fields to preserve credentials.
+await ssh.update(id, patch)
+await ssh.copy(ref, { id, host, name })
 await ssh.remove(id)
-await ssh.bash(ref, command, timeoutMs, shell) // Returns execution status and output.
-await ssh.upload(ref, localPath, remotePath)   // Maximum 128MB.
-await ssh.download(ref, remotePath, localPath) // Maximum 128MB.
-await ssh.copy(ref, { id, host, name })        // Copies credentials without returning them.
+await ssh.bash(ref, command, timeoutMs, shell)
+await ssh.upload(ref, localPath, remotePath)
+await ssh.download(ref, remotePath, localPath)
 ```
 
-## 认证信息
+`ref` 支持主机标识、名称、`user@host` 或地址。更新时省略认证字段以保留原值。
 
-- 密码以**明文**保存在主机配置文件中，建议优先使用密钥认证。
-- 主机列表与工具返回值不含密码明文，只返回 `hasPassword` 布尔值。
+### 实现与验证
 
-## 开发验证
+- 设置页面复用 Harness 的认证通道 `/api/dsh-ssh/request`。
+- 远程脚本通过 SSH stdin 传入；密码认证使用 `SSH_ASKPASS`，无需 sshpass 或 pty。
+- 文件通过 base64 over SSH 传输，无需 scp。
+- 显式关闭 `ControlMaster`、`ControlPath` 和 `ControlPersist`，其他 SSH 配置仍可生效。
 
-运行 `npm test` 验证存储、执行接口和设置页面。设置 `DSH_RUNTIME_DIR` 为目标 Harness 的 `node_modules` 目录后，还会运行真实 Cordis/Tools 生命周期集成测试；未设置时会明确跳过这三项。验证使用临时数据，不会连接真实 SSH 主机。
+```bash
+npm test
+
+# 加载目标 Harness 的真实运行时，执行额外集成测试
+DSH_RUNTIME_DIR=/absolute/path/to/harness/node_modules npm test
+```
+
+未设置 `DSH_RUNTIME_DIR` 时，三项运行时集成测试会明确跳过。自动化测试使用临时配置，不连接真实 SSH 主机。
